@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import AnalyticsCharts from "@/components/AnalyticsCharts";
 import { 
   ArrowRight, 
   Mic, 
@@ -282,6 +283,9 @@ export default function Home() {
           </div>
         </motion.div>
       </section>
+
+      {/* Analytics & Grievance Resolution Charts */}
+      <AnalyticsCharts />
 
       {/* How it Works Section */}
       <section id="how-it-works" className="w-full bg-card py-20 border-y border-border">

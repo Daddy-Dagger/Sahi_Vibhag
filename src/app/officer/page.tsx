@@ -21,6 +21,17 @@ import {
   AlertCircle
 } from "lucide-react";
 import Link from "next/link";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip as RechartsTooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 export default function OfficerDashboard() {
   const [complaints, setComplaints] = useState<any[]>([]);
@@ -272,50 +283,133 @@ export default function OfficerDashboard() {
           
           {/* Charts panel */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Department stats */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
-              <h3 className="text-xs font-extrabold uppercase text-foreground mb-4 flex items-center gap-1.5">
+            {/* Department stats Donut Pie Chart */}
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-premium flex flex-col justify-between">
+              <h3 className="text-xs font-extrabold uppercase text-foreground mb-2 flex items-center gap-1.5">
                 <Building2 className="w-4 h-4 text-primary-blue" />
-                Department Routing Split
+                Department Distribution (Pie Chart)
               </h3>
               {deptStats.length === 0 ? (
-                <p className="text-xs text-muted text-center py-4">No data available.</p>
+                <p className="text-xs text-muted text-center py-8">No grievance data available.</p>
               ) : (
-                <div className="space-y-3">
-                  {deptStats.slice(0, 3).map((stat, idx) => (
-                    <div key={idx}>
-                      <div className="flex justify-between text-xs font-semibold mb-1">
-                        <span className="truncate max-w-[200px] text-muted">{stat.name}</span>
-                        <span className="text-foreground">{stat.count} ({stat.percentage}%)</span>
-                      </div>
-                      <div className="w-full bg-muted-background h-2 rounded-full overflow-hidden">
-                        <div
-                          className="bg-primary-blue h-full rounded-full"
-                          style={{ width: `${stat.percentage}%` }}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <div className="w-36 h-36 relative flex-shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <RechartsTooltip
+                          content={({ active, payload }: any) => {
+                            if (active && payload && payload.length) {
+                              const d = payload[0].payload;
+                              return (
+                                <div className="bg-card border border-border p-2 rounded-lg text-xs shadow-lg">
+                                  <span className="font-bold block text-foreground">{d.name}</span>
+                                  <span className="text-primary-blue font-extrabold">{d.count} Grievances ({d.percentage}%)</span>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
                         />
-                      </div>
+                        <Pie
+                          data={deptStats}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={36}
+                          outerRadius={56}
+                          paddingAngle={3}
+                          dataKey="count"
+                          isAnimationActive={true}
+                          animationDuration={1300}
+                        >
+                          {deptStats.map((entry, index) => {
+                            const colors = ["#2563eb", "#f97316", "#8b5cf6", "#06b6d4", "#10b981", "#64748b"];
+                            return (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={colors[index % colors.length]}
+                                stroke="var(--card)"
+                                strokeWidth={2}
+                              />
+                            );
+                          })}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-xs font-black text-foreground">{totalCount}</span>
+                      <span className="text-[8px] text-muted font-bold uppercase">Total</span>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="space-y-1.5 text-xs w-full overflow-hidden">
+                    {deptStats.slice(0, 4).map((stat, idx) => {
+                      const colors = ["#2563eb", "#f97316", "#8b5cf6", "#06b6d4", "#10b981", "#64748b"];
+                      return (
+                        <div key={idx} className="flex justify-between items-center text-[11px]">
+                          <span className="flex items-center gap-1.5 truncate max-w-[130px] text-muted">
+                            <span
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: colors[idx % colors.length] }}
+                            />
+                            <span className="truncate">{stat.name}</span>
+                          </span>
+                          <span className="font-bold text-foreground">{stat.count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Category stats */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-premium">
-              <h3 className="text-xs font-extrabold uppercase text-foreground mb-4 flex items-center gap-1.5">
+            {/* Category stats Bar Chart */}
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-premium flex flex-col justify-between">
+              <h3 className="text-xs font-extrabold uppercase text-foreground mb-2 flex items-center gap-1.5">
                 <Cpu className="w-4 h-4 text-primary-orange" />
-                Common Grievance Categories
+                Category Volume (Bar Graph)
               </h3>
               {catStats.length === 0 ? (
-                <p className="text-xs text-muted text-center py-4">No data available.</p>
+                <p className="text-xs text-muted text-center py-8">No category data available.</p>
               ) : (
-                <div className="grid grid-cols-2 gap-3.5">
-                  {catStats.map((stat, idx) => (
-                    <div key={idx} className="bg-muted-background/40 border border-border/80 p-2.5 rounded-xl text-center">
-                      <span className="block text-lg font-extrabold text-primary-orange">{stat.count}</span>
-                      <span className="text-[10px] text-muted font-bold block truncate">{stat.name}</span>
-                    </div>
-                  ))}
+                <div className="w-full h-36">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={catStats} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <XAxis
+                        dataKey="name"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: "currentColor", fontSize: 10 }}
+                        className="text-muted font-medium"
+                      />
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: "currentColor", fontSize: 10 }}
+                        className="text-muted font-medium"
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }: any) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="bg-card border border-border p-2 rounded-lg text-xs shadow-lg">
+                                <span className="font-bold text-foreground block">{payload[0]?.payload?.name}</span>
+                                <span className="text-primary-orange font-bold">{payload[0]?.value} Cases</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar
+                        dataKey="count"
+                        fill="#f97316"
+                        radius={[6, 6, 0, 0]}
+                        isAnimationActive={true}
+                        animationDuration={1500}
+                        animationEasing="ease-out"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               )}
             </div>
