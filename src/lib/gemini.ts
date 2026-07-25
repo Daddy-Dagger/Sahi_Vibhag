@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-// import { OpenAI } from "openai";
+import { OpenAI } from "openai";
 
-interface AIAnalysisResult {
+export interface AIAnalysisResult {
   title: string;
   translatedDescription: string | null;
   department: string;
@@ -12,9 +12,10 @@ interface AIAnalysisResult {
   evidenceChecklist: Array<{ name: string; required: boolean; submitted: boolean }>;
   location: string | null;
   confidence: number;
+  provider?: "OpenAI" | "Gemini" | "Fallback";
 }
 
-// Fallback keyword-based analysis when Gemini key is not present
+// Fallback keyword-based analysis when AI keys are not present or fail
 const performFallbackAnalysis = (text: string): AIAnalysisResult => {
   const t = text.toLowerCase();
   let department = "General Administration";
@@ -110,21 +111,74 @@ const performFallbackAnalysis = (text: string): AIAnalysisResult => {
     missingInformation,
     evidenceChecklist,
     location,
-    confidence
+    confidence,
+    provider: "Fallback",
   };
 };
 
-export async function analyzeComplaint(text: string): Promise<AIAnalysisResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  
-  if (!apiKey || apiKey === "MOCK_KEY" || apiKey.trim() === "") {
-    console.log("[Sahi Vibhag AI] No GEMINI_API_KEY found. Using fallback keyword analysis.");
-    return performFallbackAnalysis(text);
-  }
+async function analyzeWithOpenAI(text: string, apiKey: string): Promise<AIAnalysisResult> {
+  const openai = new OpenAI({ apiKey });
+  const modelName = process.env.OPENAI_MODEL || "gpt-4o";
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const prompt = `You are "Sahi Vibhag AI", a production-grade AI-powered multilingual civic grievance assistant for the Government of India, developed for the IIT Jammu AI Hackathon.
+  const prompt = `You are "Sahi Vibhag AI", a production-grade AI-powered multilingual civic grievance assistant for the Government of India, developed for the IIT Jammu AI Hackathon.
+Your goal is to parse a citizen's complaint (which might be in Hindi, English, Hinglish, Urdu, Dogri, or other regional languages), translate regional complaints to Hindi for government records, extract key structured information, determine the correct department, assign an appropriate priority, summarize it in a professional government-ready format, and detect missing information.
+
+Analyze this citizen complaint:
+"${text}"
+
+Return a structured JSON object matching this schema:
+{
+  "title": string, // A concise, clear title in English summarizing the issue
+  "translatedDescription": string | null, // If original text is in Hindi/Hinglish/Urdu/Dogri etc, translate to clear formal Hindi. If original is in English, return null.
+  "department": string, // Must be one of: "Public Works Department (PWD)", "Municipal Corporation", "Power Development Department (PDD)", "Water Supply Department (Jal Shakti)", "Traffic Police", "General Administration"
+  "priority": "LOW" | "MEDIUM" | "HIGH" | "URGENT", // Choose priority. Safety hazards/broken electric wires = URGENT. Public blockages = HIGH. Standard issues = MEDIUM. General feedback = LOW.
+  "category": string, // A 2-3 word category like "Sewerage Overflows", "Road Potholes", "Streetlight Malfunction", "Drinking Water Supply"
+  "summary": string, // A concise, formal, government-ready summary (1-2 sentences) of the grievance in English.
+  "missingInformation": string[], // Critical details not mentioned in complaint needed to fix it (e.g. ["Specific house number", "Pole identification number", "Landmark"])
+  "evidenceChecklist": Array<{ name: string, required: boolean, submitted: boolean }>, // Suggest 1-2 evidence files that could be uploaded
+  "location": string | null, // Extracted landmark, street, sector, or city mentioned in text. Null if none found.
+  "confidence": number // Float between 0.0 and 1.0 indicating AI routing confidence
+}`;
+
+  const completion = await openai.chat.completions.create({
+    model: modelName,
+    messages: [
+      {
+        role: "system",
+        content: "You are an AI assistant that analyzes civic complaints and returns structured JSON output strictly matching the requested format.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.2,
+  });
+
+  const responseText = completion.choices[0]?.message?.content || "";
+  const jsonResult = JSON.parse(responseText.trim());
+
+  return {
+    title: jsonResult.title || "Civic Complaint",
+    translatedDescription: jsonResult.translatedDescription || null,
+    department: jsonResult.department || "General Administration",
+    priority: jsonResult.priority || "MEDIUM",
+    category: jsonResult.category || "General",
+    summary: jsonResult.summary || "",
+    missingInformation: jsonResult.missingInformation || jsonResult.missing_information || [],
+    evidenceChecklist: jsonResult.evidenceChecklist || jsonResult.evidence_checklist || [
+      { name: "Photograph of the issue", required: true, submitted: false }
+    ],
+    location: jsonResult.location || null,
+    confidence: jsonResult.confidence || 0.95,
+    provider: "OpenAI",
+  };
+}
+
+async function analyzeWithGemini(text: string, apiKey: string): Promise<AIAnalysisResult> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const prompt = `You are "Sahi Vibhag AI", a production-grade AI-powered multilingual civic grievance assistant for the Government of India, developed for the IIT Jammu AI Hackathon.
 Your goal is to parse a citizen's complaint (which might be in Hindi, English, Hinglish, Urdu, Dogri, or other regional languages), translate regional complaints to Hindi for government records, extract key structured information, determine the correct department, assign an appropriate priority, summarize it in a professional government-ready format, and detect missing information.
 
 Analyze this citizen complaint:
@@ -146,40 +200,61 @@ Return a structured JSON object strictly matching this TypeScript type:
 
 Do not include any markdown backticks or explanation. Return ONLY the JSON object.`;
 
-    const modelName = "gemini-3.6-flash";
-
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          responseMimeType: "application/json",
-        }
-      });
-
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
-      const jsonResult = JSON.parse(responseText.trim());
-
-      return {
-        title: jsonResult.title || "Civic Complaint",
-        translatedDescription: jsonResult.translatedDescription || null,
-        department: jsonResult.department || "General Administration",
-        priority: jsonResult.priority || "MEDIUM",
-        category: jsonResult.category || "General",
-        summary: jsonResult.summary || "",
-        missingInformation: jsonResult.missingInformation || jsonResult.missing_information || [],
-        evidenceChecklist: jsonResult.evidenceChecklist || jsonResult.evidence_checklist || [
-          { name: "Photograph of the issue", required: true, submitted: false }
-        ],
-        location: jsonResult.location || null,
-        confidence: jsonResult.confidence || 0.90
-      };
-    } catch (error) {
-      console.warn(`[Sahi Vibhag AI] Gemini model ${modelName} failed, using fallback.`, error);
-      throw error;
+  const modelName = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    generationConfig: {
+      responseMimeType: "application/json",
     }
-  } catch (error) {
-    console.error("[Sahi Vibhag AI] Error calling Gemini API:", error);
-    return performFallbackAnalysis(text);
-  }
+  });
+
+  const result = await model.generateContent(prompt);
+  const responseText = result.response.text();
+  const jsonResult = JSON.parse(responseText.trim());
+
+  return {
+    title: jsonResult.title || "Civic Complaint",
+    translatedDescription: jsonResult.translatedDescription || null,
+    department: jsonResult.department || "General Administration",
+    priority: jsonResult.priority || "MEDIUM",
+    category: jsonResult.category || "General",
+    summary: jsonResult.summary || "",
+    missingInformation: jsonResult.missingInformation || jsonResult.missing_information || [],
+    evidenceChecklist: jsonResult.evidenceChecklist || jsonResult.evidence_checklist || [
+      { name: "Photograph of the issue", required: true, submitted: false }
+    ],
+    location: jsonResult.location || null,
+    confidence: jsonResult.confidence || 0.90,
+    provider: "Gemini",
+  };
 }
+
+export async function analyzeComplaint(text: string): Promise<AIAnalysisResult> {
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+
+  // 1. Primary AI Provider: OpenAI (gpt-4o)
+  if (openAiKey && openAiKey !== "MOCK_KEY" && openAiKey.trim() !== "") {
+    try {
+      console.log("[Sahi Vibhag AI] Analyzing complaint using OpenAI (gpt-4o)...");
+      return await analyzeWithOpenAI(text, openAiKey);
+    } catch (error) {
+      console.warn("[Sahi Vibhag AI] OpenAI API call failed. Falling back to Gemini...", error);
+    }
+  }
+
+  // 2. Secondary AI Provider / Fallback: Gemini (gemini-3.6-flash)
+  if (geminiKey && geminiKey !== "MOCK_KEY" && geminiKey.trim() !== "") {
+    try {
+      console.log("[Sahi Vibhag AI] Analyzing complaint using Gemini fallback...");
+      return await analyzeWithGemini(text, geminiKey);
+    } catch (error) {
+      console.warn("[Sahi Vibhag AI] Gemini API call failed. Falling back to keyword analysis...", error);
+    }
+  }
+
+  // 3. Fallback: Keyword-based rule engine
+  console.log("[Sahi Vibhag AI] No valid primary/secondary AI keys or services reachable. Using fallback keyword analysis.");
+  return performFallbackAnalysis(text);
+}
+

@@ -18,7 +18,7 @@ It is built as a premium SaaS product with a clean "Apple meets Government" desi
 * **Backend**: Next.js Serverless API Routes (Node.js)
 * **Database**: Neon Serverless PostgreSQL (dynamic schema)
 * **ORM**: Prisma Client v6
-* **AI Model**: Gemini 2.5 Flash (`gemini-2.5-flash`)
+* **AI Models**: OpenAI GPT-4o (Primary Smart Engine) with Google Gemini 3.6 Flash Fallback & Rule-based keyword engine
 * **Future-Ready Integrations**: Bhashini Speech-to-Speech API, OpenStreetMap route planning, and Retrieval-Augmented Generation (RAG) knowledge base.
 
 ---
@@ -28,8 +28,8 @@ It is built as a premium SaaS product with a clean "Apple meets Government" desi
 ### 1. Multilingual Audio Grievance Capture ("Bas Boliye...")
 Citizens can speak directly into their microphone in their native language (e.g. Hindi, Hinglish, English). The browser's native Web Speech API transcribes the spoken complaint in real-time.
 
-### 2. Gemini 2.5 Auto-Routing
-Gemini 2.5 Flash analyzes the grievance to:
+### 2. OpenAI GPT-4o Auto-Routing (with Gemini Fallback)
+OpenAI `gpt-4o` (or Gemini fallback) analyzes the grievance to:
 * Determine the correct department (e.g. PWD, Sanitation, Electricity Board).
 * Assign a priority score (`LOW`, `MEDIUM`, `HIGH`, `URGENT`) based on public safety hazards.
 * Extract landmarks/address mentions.
@@ -57,7 +57,7 @@ Draws an animated routing path between the coordinates of the grievance site and
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── ai/          # Endpoint invoking Gemini 2.5 Flash parser
+│   │   │   ├── ai/          # Endpoint invoking AI grievance parser
 │   │   │   └── complaints/  # Grievance CRUD & tracking PATCH endpoints
 │   │   ├── citizen/         # Citizen filing portal (Speech + AI analysis)
 │   │   ├── complaint/[id]/  # Citizen tracking timeline & OpenStreetMap path
@@ -70,7 +70,7 @@ Draws an animated routing path between the coordinates of the grievance site and
 │   │   └── Footer.tsx       # Hackathon credentials & theme info
 │   └── lib/
 │       ├── db.ts            # Dynamic Database router (Neon PostgreSQL <-> Mock DB)
-│       └── gemini.ts        # Gemini SDK wrapper with Keyword Routing Fallback
+│       └── gemini.ts        # AI Router (OpenAI gpt-4o -> Gemini Fallback -> Keyword Fallback)
 ```
 
 ---
@@ -85,10 +85,10 @@ npm install
 ### 2. Configure Environment Variables
 Create a `.env` file in the root directory:
 ```env
-# Neon PostgreSQL Connection URL
-DATABASE_URL="postgresql://user:password@your-neon-host.neon.tech/dbname?sslmode=require"
+# OpenAI API Key (Primary Smart Engine)
+OPENAI_API_KEY="sk-proj-..."
 
-# Gemini Developer API Key (Obtain from Google AI Studio)
+# Gemini Developer API Key (Fallback AI Engine)
 GEMINI_API_KEY="AIzaSyYourGeminiApiKeyHere"
 ```
 
