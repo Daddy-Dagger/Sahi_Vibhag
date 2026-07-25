@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+// import { OpenAI } from "openai";
 
 interface AIAnalysisResult {
   title: string;
@@ -123,14 +124,6 @@ export async function analyzeComplaint(text: string): Promise<AIAnalysisResult> 
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Use gemini-2.5-flash for speed and structured outputs
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-      }
-    });
-
     const prompt = `You are "Sahi Vibhag AI", a production-grade AI-powered multilingual civic grievance assistant for the Government of India, developed for the IIT Jammu AI Hackathon.
 Your goal is to parse a citizen's complaint (which might be in Hindi, English, Hinglish, Urdu, Dogri, or other regional languages), translate regional complaints to Hindi for government records, extract key structured information, determine the correct department, assign an appropriate priority, summarize it in a professional government-ready format, and detect missing information.
 
@@ -153,27 +146,38 @@ Return a structured JSON object strictly matching this TypeScript type:
 
 Do not include any markdown backticks or explanation. Return ONLY the JSON object.`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    
-    // Parse response
-    const jsonResult = JSON.parse(responseText.trim());
-    
-    // Return with camelCase fields as expected by schema
-    return {
-      title: jsonResult.title || "Civic Complaint",
-      translatedDescription: jsonResult.translatedDescription || null,
-      department: jsonResult.department || "General Administration",
-      priority: jsonResult.priority || "MEDIUM",
-      category: jsonResult.category || "General",
-      summary: jsonResult.summary || "",
-      missingInformation: jsonResult.missingInformation || jsonResult.missing_information || [],
-      evidenceChecklist: jsonResult.evidenceChecklist || jsonResult.evidence_checklist || [
-        { name: "Photograph of the issue", required: true, submitted: false }
-      ],
-      location: jsonResult.location || null,
-      confidence: jsonResult.confidence || 0.90
-    };
+    const modelName = "gemini-2.0-flash";
+
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+        }
+      });
+
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      const jsonResult = JSON.parse(responseText.trim());
+
+      return {
+        title: jsonResult.title || "Civic Complaint",
+        translatedDescription: jsonResult.translatedDescription || null,
+        department: jsonResult.department || "General Administration",
+        priority: jsonResult.priority || "MEDIUM",
+        category: jsonResult.category || "General",
+        summary: jsonResult.summary || "",
+        missingInformation: jsonResult.missingInformation || jsonResult.missing_information || [],
+        evidenceChecklist: jsonResult.evidenceChecklist || jsonResult.evidence_checklist || [
+          { name: "Photograph of the issue", required: true, submitted: false }
+        ],
+        location: jsonResult.location || null,
+        confidence: jsonResult.confidence || 0.90
+      };
+    } catch (error) {
+      console.warn(`[Sahi Vibhag AI] Gemini model ${modelName} failed, using fallback.`, error);
+      throw error;
+    }
   } catch (error) {
     console.error("[Sahi Vibhag AI] Error calling Gemini API:", error);
     return performFallbackAnalysis(text);
