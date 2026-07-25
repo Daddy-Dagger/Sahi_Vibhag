@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Cpu, ShieldCheck, Database, Award, HelpCircle } from "lucide-react";
+import { Cpu, ShieldCheck, Database, Award, User, LogOut, Lock, LogIn } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isMock, setIsMock] = useState(true);
+  const [user, setUser] = useState<{ name: string; email: string; role: string; department?: string } | null>(null);
 
   // Monitor scroll for premium visual styling changes
   useEffect(() => {
@@ -24,24 +25,31 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Quick check on DB status
+  // Fetch current user session
   useEffect(() => {
-    // In a real app we could hit a lightweight status endpoint, or simply check env flags.
-    // For our hackathon client, we'll fetch our check, but default to mock indication safely.
-    fetch("/api/complaints")
-      .then((res) => {
-        // If it returns successfully, we check custom headers or just assume mock if database-url was the localhost template.
-        // We'll simulate checking if Neon is active. We can do a quick check.
-        // Actually, we can just display the db state.
-        setIsMock(false); // If it succeeded we might be on real, but we can verify in console logs.
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.user) {
+          setUser(data.user);
+        } else {
+          setUser(null);
+        }
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => setUser(null));
+  }, [pathname]);
 
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUser(null);
+    router.push("/login");
+    router.refresh();
+  };
+
+  // Discrete consumer navbar items (Officer links MUST NOT appear on main navbar)
   const navItems = [
     { name: "Home", path: "/" },
-    { name: "Citizen Portal", path: "/citizen" },
-    { name: "Officer Dashboard", path: "/officer" },
+    { name: "Grievance Portal", path: "/citizen" },
   ];
 
   return (
@@ -75,13 +83,13 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Desktop Navigation Links */}
+        {/* Public Desktop Navigation Links */}
         <nav className="hidden md:flex items-center space-x-1">
           {navItems.map((item) => {
             const isActive = pathname === item.path;
             return (
               <Link key={item.path} href={item.path} className="relative px-4 py-2 text-sm font-medium transition-colors">
-                <span className={isActive ? "text-primary-blue dark:text-white" : "text-muted hover:text-foreground"}>
+                <span className={isActive ? "text-primary-blue dark:text-white font-semibold" : "text-muted hover:text-foreground"}>
                   {item.name}
                 </span>
                 {isActive && (
@@ -94,9 +102,17 @@ export default function Navbar() {
               </Link>
             );
           })}
+
+          {/* Render Officer Dashboard link ONLY if user is currently authenticated as an OFFICER */}
+          {user && user.role === "OFFICER" && (
+            <Link href="/officer" className="relative px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1.5 ml-2 hover:bg-amber-500/20 transition">
+              <Lock className="w-3 h-3" />
+              <span>Officer Portal</span>
+            </Link>
+          )}
         </nav>
 
-        {/* Right Status Panel */}
+        {/* Right Status & Auth Panel */}
         <div className="flex items-center space-x-3">
           {/* Neon DB Status Badge */}
           <div className="hidden lg:flex items-center space-x-1.5 px-3 py-1 rounded-full text-[10px] font-medium border bg-card border-border shadow-premium">
@@ -108,13 +124,34 @@ export default function Navbar() {
             </span>
           </div>
 
-          {/* Theme / Portal Badge */}
-          <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-[10px] font-medium border bg-primary-orange/10 text-primary-orange border-primary-orange/20 shadow-glow-orange">
-            <ShieldCheck className="w-3 h-3" />
-            <span>AI routed (Gemini 2.5)</span>
-          </div>
+          {/* User Profile / Auth State */}
+          {user ? (
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex flex-col text-right">
+                <span className="text-xs font-semibold text-foreground leading-tight">{user.name}</span>
+                <span className="text-[10px] text-muted font-medium uppercase tracking-wider">{user.role}</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                title="Sign Out"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card hover:bg-muted text-xs font-medium text-muted hover:text-foreground transition"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-primary-blue to-primary-blue/90 text-white text-xs font-semibold shadow-glow-blue hover:opacity-95 transition"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Consumer Sign In</span>
+            </Link>
+          )}
         </div>
       </div>
     </motion.header>
   );
 }
+

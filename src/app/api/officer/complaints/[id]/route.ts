@@ -40,40 +40,16 @@ const parseComplaintFields = (complaint: any) => {
   };
 };
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const complaint = await db.complaint.findUnique({
-      where: { id },
-    });
-
-    if (!complaint) {
-      return NextResponse.json({ error: "Complaint not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(parseComplaintFields(complaint));
-  } catch (error: any) {
-    console.error("Fetch Single Complaint Error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch complaint: " + error.message },
-      { status: 500 }
-    );
-  }
-}
-
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Role-based security check: only OFFICERS can mutate complaint status/notes
+    // 1. Controller-level authorization check
     const user = await getAuthUserFromRequest(req);
     if (!user || user.role !== "OFFICER") {
       return NextResponse.json(
-        { error: "Forbidden: Officer credentials required to modify or resolve complaints." },
+        { error: "Forbidden: Officer privilege required for application processing and status mutation." },
         { status: 403 }
       );
     }
@@ -81,7 +57,6 @@ export async function PATCH(
     const { id } = await params;
     const body = await req.json();
 
-    // Fetch existing complaint to update the timeline
     const existing = await db.complaint.findUnique({
       where: { id },
     });
@@ -91,7 +66,6 @@ export async function PATCH(
     }
 
     const currentTimeline = parseComplaintFields(existing).timeline;
-
     const dataToUpdate: any = {};
     const timelineUpdates: any[] = [...currentTimeline];
 
@@ -101,7 +75,9 @@ export async function PATCH(
       timelineUpdates.push({
         status: body.status,
         timestamp: new Date().toISOString(),
-        note: body.officerNotes ? `Status changed to ${body.status}. Officer noted: ${body.officerNotes}` : `Status changed to ${body.status} by officer ${user.name}.`,
+        note: body.officerNotes 
+          ? `Status updated to ${body.status} by Officer ${user.name}. Notes: ${body.officerNotes}` 
+          : `Status changed to ${body.status} by Officer ${user.name}.`,
       });
     }
 
@@ -111,7 +87,7 @@ export async function PATCH(
       timelineUpdates.push({
         status: existing.status,
         timestamp: new Date().toISOString(),
-        note: `Re-routed from ${existing.department} to ${body.department} by officer ${user.name}.`,
+        note: `Re-routed from ${existing.department} to ${body.department} by Officer ${user.name}.`,
       });
     }
 
@@ -123,22 +99,20 @@ export async function PATCH(
     // Officer Notes Update
     if (body.officerNotes !== undefined) {
       dataToUpdate.officerNotes = body.officerNotes;
-      // Only add timeline entry if status didn't change (as it is already covered above)
       if (!body.status || body.status === existing.status) {
         timelineUpdates.push({
           status: existing.status,
           timestamp: new Date().toISOString(),
-          note: `Officer ${user.name} notes updated: ${body.officerNotes}`,
+          note: `Officer ${user.name} added notes: ${body.officerNotes}`,
         });
       }
     }
 
-    // Evidence checklist submission updates
+    // Evidence checklist updates
     if (body.evidenceChecklist) {
       dataToUpdate.evidenceChecklist = JSON.stringify(body.evidenceChecklist);
     }
 
-    // Include updated timeline
     if (timelineUpdates.length > currentTimeline.length) {
       dataToUpdate.timeline = JSON.stringify(timelineUpdates);
     }
@@ -150,7 +124,7 @@ export async function PATCH(
 
     return NextResponse.json(parseComplaintFields(updatedComplaint));
   } catch (error: any) {
-    console.error("Update Complaint Error:", error);
+    console.error("Officer Complaint Patch Error:", error);
     return NextResponse.json(
       { error: "Failed to update complaint: " + error.message },
       { status: 500 }
@@ -163,17 +137,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Role-based security check: only OFFICERS can delete complaints
     const user = await getAuthUserFromRequest(req);
     if (!user || user.role !== "OFFICER") {
       return NextResponse.json(
-        { error: "Forbidden: Officer credentials required to delete complaints." },
+        { error: "Forbidden: Officer privilege required to delete grievances." },
         { status: 403 }
       );
     }
 
     const { id } = await params;
-    
     const existing = await db.complaint.findUnique({
       where: { id },
     });
@@ -186,13 +158,12 @@ export async function DELETE(
       where: { id },
     });
 
-    return NextResponse.json({ message: "Complaint deleted successfully" });
+    return NextResponse.json({ message: "Complaint deleted successfully by Officer" });
   } catch (error: any) {
-    console.error("Delete Complaint Error:", error);
+    console.error("Officer Complaint Delete Error:", error);
     return NextResponse.json(
       { error: "Failed to delete complaint: " + error.message },
       { status: 500 }
     );
   }
 }
-
