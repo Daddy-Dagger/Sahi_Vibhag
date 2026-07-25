@@ -58,9 +58,9 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         {/* Brand Logo */}
         <Link href="/" className="flex items-center space-x-3 group">
-          <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-primary-blue via-primary-blue to-primary-orange shadow-glow-blue overflow-hidden">
+          <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-primary-blue via-primary-blue to-primary-orange shadow-glow-blue">
             <Cpu className="w-5 h-5 text-white animate-pulse" />
-            <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl overflow-hidden" />
           </div>
           <div>
             <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-primary-blue via-primary-blue to-primary-orange bg-clip-text text-transparent">

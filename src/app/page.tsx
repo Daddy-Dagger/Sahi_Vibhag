@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import Button from "@/components/Button";
 import AnalyticsCharts from "@/components/AnalyticsCharts";
 import { 
   ArrowRight, 
@@ -144,19 +145,13 @@ export default function Home() {
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center w-full max-w-md">
-            <Link
-              href="/citizen"
-              className="flex items-center justify-center space-x-2 px-8 py-4 rounded-xl bg-gradient-to-r from-primary-blue to-primary-blue/90 hover:from-primary-blue/95 text-white font-semibold transition-all duration-300 shadow-glow-blue hover:scale-[1.02]"
-            >
+            <Button href="/citizen" variant="glow-blue" size="lg">
               <span>Start Complaint Portal</span>
               <ArrowRight className="w-4 h-4" />
-            </Link>
-            <a
-              href="#how-it-works"
-              className="flex items-center justify-center px-8 py-4 rounded-xl bg-card border border-border text-foreground hover:bg-muted-background transition-colors duration-300 font-semibold shadow-premium"
-            >
+            </Button>
+            <Button href="#how-it-works" variant="outline" size="lg">
               Learn More
-            </a>
+            </Button>
           </div>
         </motion.div>
       </section>
@@ -206,10 +201,12 @@ export default function Home() {
                 placeholder="Type or paste a civic complaint here (e.g. 'Street light broken near Jammu Bypass road...')"
                 className="w-full min-h-[120px] p-4 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue/30"
               />
-              <button
+              <Button
                 disabled={simulating || !simulatedComplaint}
                 onClick={() => runSimulation(simulatedComplaint)}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-blue to-primary-orange hover:brightness-105 text-white font-semibold transition-all duration-200 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                variant="glow-gradient"
+                size="md"
+                className="w-full"
               >
                 {simulating ? (
                   <>
@@ -222,7 +219,7 @@ export default function Home() {
                     Analyze & Route Complaint
                   </>
                 )}
-              </button>
+              </Button>
             </div>
 
             {/* AI Output Preview */}

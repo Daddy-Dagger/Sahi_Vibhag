@@ -3,6 +3,8 @@
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import Button from "@/components/Button";
+import ComplaintMapViewer from "@/components/ComplaintMapViewer";
 import {
   ArrowLeft,
   Building,
@@ -101,9 +103,9 @@ export default function ComplaintDetails({ params }: ComplaintDetailsProps) {
         <BadgeAlert className="h-16 w-16 text-red-500 mb-4 animate-bounce" />
         <h2 className="text-xl font-bold">Complaint Record Not Found</h2>
         <p className="text-xs text-muted mt-2 mb-6">The tracking ID may be incorrect or the record was archived.</p>
-        <Link href="/" className="px-5 py-2.5 bg-primary-blue text-white rounded-xl text-xs font-semibold shadow-glow-blue">
+        <Button href="/" variant="glow-blue" size="md">
           Go back Home
-        </Link>
+        </Button>
       </div>
     );
   }
@@ -228,77 +230,18 @@ export default function ComplaintDetails({ params }: ComplaintDetailsProps) {
             </div>
           )}
 
-          {/* OpenStreetMap Simulator (Visual Showcase) */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-premium overflow-hidden">
-            <h3 className="text-xs font-extrabold uppercase text-muted tracking-wider mb-4 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Navigation className="w-4 h-4 text-primary-blue animate-pulse" />
-                OpenStreetMap Routing Integration (Future Ready)
-              </span>
-              <span className="text-[9px] bg-emerald-500/10 text-emerald-500 font-bold px-1.5 py-0.5 rounded">GPS Simulator</span>
-            </h3>
-
-            {/* Stylized simulated map */}
-            <div className="relative w-full h-[180px] bg-slate-900 dark:bg-slate-950 rounded-xl overflow-hidden border border-border/80 flex items-center justify-center">
-              {/* Dot Grid Map Background */}
-              <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-60" />
-
-              {/* Animated Map SVG */}
-              <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                {/* Routing Line path */}
-                <motion.path
-                  d="M 50,130 C 120,60 180,140 280,50 C 350,20 400,100 500,80"
-                  fill="none"
-                  stroke="#3b82f6"
-                  strokeWidth="3"
-                  strokeDasharray="6, 6"
-                  initial={{ strokeDashoffset: 100 }}
-                  animate={{ strokeDashoffset: 0 }}
-                  transition={{ repeat: Infinity, duration: 6, ease: "linear" }}
-                />
-                
-                {/* Route Solid overlay line */}
-                <path
-                  d="M 50,130 C 120,60 180,140 280,50 C 350,20 400,100 500,80"
-                  fill="none"
-                  stroke="#3b82f6"
-                  strokeWidth="2"
-                  opacity="0.3"
-                />
-              </svg>
-
-              {/* Marker 1: Citizen Site */}
-              <div className="absolute left-[40px] bottom-[30px] flex flex-col items-center">
-                <div className="w-6 h-6 rounded-full bg-primary-orange flex items-center justify-center text-white text-[9px] font-bold shadow-lg animate-bounce">
-                  <MapPin className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-[8px] font-bold text-white bg-slate-800 px-1 rounded mt-1 shadow border border-slate-700 block truncate max-w-[80px]">
-                  Grievance Site
-                </span>
-              </div>
-
-              {/* Marker 2: Routed Department HQ */}
-              <div className="absolute right-[80px] top-[40px] flex flex-col items-center">
-                <div className="w-6 h-6 rounded-full bg-primary-blue flex items-center justify-center text-white text-[9px] font-bold shadow-lg animate-pulse">
-                  <Building className="w-3.5 h-3.5" />
-                </div>
-                <span className="text-[8px] font-bold text-white bg-slate-800 px-1 rounded mt-1 shadow border border-slate-700 block truncate max-w-[120px]">
-                  {complaint.department.split(" ")[0]} HQ
-                </span>
-              </div>
-
-              {/* Route coordinates HUD */}
-              <div className="absolute bottom-2 right-2 bg-slate-800/80 backdrop-blur border border-slate-700/50 p-2 rounded text-[8px] text-slate-300 font-mono">
-                <div>Lat/Long: 32.7266° N, 74.8570° E</div>
-                <div>Routing target: PWD Jammu division</div>
-              </div>
-            </div>
-
-            <div className="mt-3 text-[10px] text-muted flex items-start gap-1">
-              <MapPin className="w-3.5 h-3.5 text-primary-orange flex-shrink-0 mt-0.5" />
-              <span>Extracted Location: <span className="font-bold text-foreground">{complaint.location || "Unknown"}</span></span>
-            </div>
-          </div>
+          {/* OpenStreetMap Interactive Map & Captured Geolocation */}
+          <ComplaintMapViewer
+            latitude={complaint.latitude}
+            longitude={complaint.longitude}
+            accuracy={complaint.accuracy}
+            formattedAddress={complaint.formattedAddress}
+            landmark={complaint.landmark}
+            city={complaint.city}
+            state={complaint.state}
+            pincode={complaint.pincode}
+            locationFallback={complaint.location}
+          />
         </div>
 
         {/* Right Side: Timeline & Verification Checklist */}

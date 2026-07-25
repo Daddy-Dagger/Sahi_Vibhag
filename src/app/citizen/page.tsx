@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import Button from "@/components/Button";
+import LocationPicker, { LocationState } from "@/components/LocationPicker";
 import {
   Mic,
   MicOff,
@@ -32,6 +34,19 @@ export default function CitizenPortal() {
   const [complaintText, setComplaintText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingLanguage, setRecordingLanguage] = useState("hi-IN"); // hi-IN or en-IN
+
+  // Location state
+  const [locationData, setLocationData] = useState<LocationState>({
+    latitude: null,
+    longitude: null,
+    accuracy: null,
+    formattedAddress: "",
+    landmark: "",
+    city: "",
+    state: "",
+    pincode: "",
+    status: "idle",
+  });
   
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
@@ -154,7 +169,15 @@ export default function CitizenPortal() {
           evidenceChecklist: analysisResult.evidenceChecklist,
           citizenName: name || "Anonymous Citizen",
           citizenPhone: phone || "Not Provided",
-          location: analysisResult.location || "Unknown Location",
+          location: locationData.formattedAddress || analysisResult.location || "Unknown Location",
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          accuracy: locationData.accuracy,
+          formattedAddress: locationData.formattedAddress || analysisResult.location || "",
+          landmark: locationData.landmark || "",
+          city: locationData.city || "",
+          state: locationData.state || "",
+          pincode: locationData.pincode || "",
           confidence: analysisResult.confidence,
         }),
       });
@@ -236,6 +259,9 @@ export default function CitizenPortal() {
                 </div>
               </div>
 
+              {/* Automatic Location Capture & Interactive Map */}
+              <LocationPicker locationData={locationData} onChange={setLocationData} />
+
               <div className="rounded-2xl border border-border bg-card p-6 shadow-premium relative">
                 <h3 className="text-lg font-bold mb-4 text-foreground flex items-center gap-2">
                   <FileText className="w-5 h-5 text-primary-orange" />
@@ -251,16 +277,16 @@ export default function CitizenPortal() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setRecordingLanguage("hi-IN")}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                        recordingLanguage === "hi-IN" ? "bg-primary-orange text-white" : "bg-card text-muted border border-border"
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                        recordingLanguage === "hi-IN" ? "bg-primary-orange text-white border-transparent" : "bg-card text-muted border-border"
                       }`}
                     >
                       हिन्दी
                     </button>
                     <button
                       onClick={() => setRecordingLanguage("en-IN")}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                        recordingLanguage === "en-IN" ? "bg-primary-blue text-white" : "bg-card text-muted border border-border"
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                        recordingLanguage === "en-IN" ? "bg-primary-blue text-white border-transparent" : "bg-card text-muted border-border"
                       }`}
                     >
                       English
@@ -295,10 +321,12 @@ export default function CitizenPortal() {
                     className="w-full min-h-[160px] p-4 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue/30 mb-4"
                   />
 
-                  <button
+                  <Button
                     disabled={analyzing || !complaintText.trim()}
                     onClick={handleAnalyze}
-                    className="w-full py-3 bg-gradient-to-r from-primary-blue to-primary-blue/95 hover:scale-[1.01] text-white rounded-xl font-bold transition-all shadow-glow-blue flex items-center justify-center gap-2 disabled:opacity-50"
+                    variant="glow-blue"
+                    size="md"
+                    className="w-full"
                   >
                     {analyzing ? (
                       <>
@@ -311,7 +339,7 @@ export default function CitizenPortal() {
                         Analyze & Route Grievance
                       </>
                     )}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -480,10 +508,12 @@ export default function CitizenPortal() {
                     </div>
 
                     {/* Submit Button */}
-                    <button
+                    <Button
                       disabled={submitting}
                       onClick={handleSubmit}
-                      className="w-full py-4 bg-gradient-to-r from-primary-orange to-primary-orange/90 hover:brightness-105 text-white font-bold rounded-xl shadow-glow-orange flex items-center justify-center gap-2 transition-all duration-300 hover:scale-[1.01]"
+                      variant="glow-orange"
+                      size="lg"
+                      className="w-full"
                     >
                       {submitting ? (
                         <>
@@ -496,7 +526,7 @@ export default function CitizenPortal() {
                           Submit Complaint to Department
                         </>
                       )}
-                    </button>
+                    </Button>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -528,22 +558,24 @@ export default function CitizenPortal() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
-              <button
+              <Button
                 onClick={() => router.push(`/complaint/${createdId}`)}
-                className="py-3 bg-primary-blue text-white font-bold rounded-xl shadow-glow-blue hover:brightness-105 transition-all text-xs"
+                variant="glow-blue"
+                size="md"
               >
                 Track Live Status
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => {
                   setSubmitSuccess(false);
                   setComplaintText("");
                   setAnalysisResult(null);
                 }}
-                className="py-3 bg-card border border-border text-foreground hover:bg-muted-background font-bold rounded-xl shadow-premium transition-all text-xs"
+                variant="outline"
+                size="md"
               >
                 File Another Complaint
-              </button>
+              </Button>
             </div>
           </motion.div>
         )}

@@ -27,6 +27,14 @@ model Complaint {
   citizenName           String?
   citizenPhone          String?
   location              String?
+  latitude              Float?
+  longitude             Float?
+  accuracy              Float?
+  formattedAddress      String?
+  landmark              String?
+  city                  String?
+  state                 String?
+  pincode               String?
   confidence            Float    @default(1.0)
   audioUrl              String?
   officerNotes          String?

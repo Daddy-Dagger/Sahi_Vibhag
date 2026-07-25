@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 :root {
   --background: #fbfbfd;
@@ -77,8 +78,8 @@
   
   --shadow-premium: 0 4px 30px rgba(0, 0, 0, 0.03);
   --shadow-premium-hover: 0 10px 40px rgba(0, 0, 0, 0.08);
-  --shadow-glow-blue: 0 0 20px rgba(11, 79, 186, 0.2);
-  --shadow-glow-orange: 0 0 20px rgba(255, 103, 31, 0.2);
+  --shadow-glow-blue: 0 0 24px -2px rgba(11, 79, 186, 0.45);
+  --shadow-glow-orange: 0 0 24px -2px rgba(255, 103, 31, 0.45);
 }
 
 body {

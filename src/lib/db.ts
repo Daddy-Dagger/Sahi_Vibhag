@@ -52,6 +52,14 @@ const readMockDb = (): Complaint[] => {
         citizenName: "Amit Sharma",
         citizenPhone: "+91 98765 43210",
         location: "Main Road, Near IIT Jammu Entrance",
+        latitude: 32.8028,
+        longitude: 74.8871,
+        accuracy: 12,
+        formattedAddress: "Main Road, Jagti, Nagrota, Jammu, Jammu and Kashmir 181221",
+        landmark: "Near IIT Jammu Main Entrance Gate",
+        city: "Jammu",
+        state: "Jammu and Kashmir",
+        pincode: "181221",
         confidence: 0.96,
         audioUrl: null,
         officerNotes: null,
@@ -78,6 +86,14 @@ const readMockDb = (): Complaint[] => {
         citizenName: "Sonia Gupta",
         citizenPhone: "+91 94191 12345",
         location: "Sector 3, Lane 4, Channi Himmat, Jammu",
+        latitude: 32.6953,
+        longitude: 74.8837,
+        accuracy: 15,
+        formattedAddress: "Sector 3, Lane 4, Channi Himmat, Jammu, Jammu and Kashmir 180015",
+        landmark: "Opposite Community Park",
+        city: "Jammu",
+        state: "Jammu and Kashmir",
+        pincode: "180015",
         confidence: 0.94,
         audioUrl: null,
         officerNotes: "Sanitation inspector has been notified to deploy a collection truck immediately.",
@@ -105,6 +121,14 @@ const readMockDb = (): Complaint[] => {
         citizenName: "Vikram Singh",
         citizenPhone: "+91 99060 98765",
         location: "Chowadi to Sainik Colony Bypass Road, Jammu",
+        latitude: 32.6781,
+        longitude: 74.9124,
+        accuracy: 25,
+        formattedAddress: "National Highway 44 Bypass, Chowadi, Jammu, Jammu and Kashmir 180011",
+        landmark: "Near Sainik Colony Flyover",
+        city: "Jammu",
+        state: "Jammu and Kashmir",
+        pincode: "180011",
         confidence: 0.98,
         audioUrl: null,
         officerNotes: null,
@@ -161,9 +185,9 @@ const mockDb = {
       if (args?.orderBy) {
         const orderKey = Object.keys(args.orderBy)[0];
         const orderDir = args.orderBy[orderKey];
-        data.sort((a, b) => {
-          const valA = a[orderKey as keyof Complaint];
-          const valB = b[orderKey as keyof Complaint];
+        data.sort((a: any, b: any) => {
+          const valA = new Date(a[orderKey]).getTime() || a[orderKey];
+          const valB = new Date(b[orderKey]).getTime() || b[orderKey];
           if (valA === null || valA === undefined) return 1;
           if (valB === null || valB === undefined) return -1;
           if (valA < valB) return orderDir === "asc" ? -1 : 1;
@@ -200,6 +224,14 @@ const mockDb = {
         citizenName: args.data.citizenName || null,
         citizenPhone: args.data.citizenPhone || null,
         location: args.data.location || null,
+        latitude: args.data.latitude !== undefined ? args.data.latitude : null,
+        longitude: args.data.longitude !== undefined ? args.data.longitude : null,
+        accuracy: args.data.accuracy !== undefined ? args.data.accuracy : null,
+        formattedAddress: args.data.formattedAddress || null,
+        landmark: args.data.landmark || null,
+        city: args.data.city || null,
+        state: args.data.state || null,
+        pincode: args.data.pincode || null,
         confidence: args.data.confidence !== undefined ? args.data.confidence : 1.0,
         audioUrl: args.data.audioUrl || null,
         officerNotes: args.data.officerNotes || null,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Button from "@/components/Button";
 import {
   TrendingUp,
   AlertTriangle,
@@ -676,10 +677,12 @@ export default function OfficerDashboard() {
                   </div>
 
                   {/* Save button */}
-                  <button
+                  <Button
                     disabled={actionSaving}
                     onClick={handleSaveAction}
-                    className="w-full py-3 bg-gradient-to-r from-primary-blue to-primary-orange hover:brightness-105 text-white font-bold rounded-xl text-xs shadow-glow-blue flex items-center justify-center gap-1.5 transition-all duration-200"
+                    variant="glow-gradient"
+                    size="md"
+                    className="w-full"
                   >
                     {actionSaving ? (
                       <>
@@ -692,7 +695,7 @@ export default function OfficerDashboard() {
                         Archive Action Update
                       </>
                     )}
-                  </button>
+                  </Button>
                 </div>
               </motion.div>
             )}
