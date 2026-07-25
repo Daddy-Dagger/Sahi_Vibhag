@@ -146,7 +146,8 @@ Return a structured JSON object strictly matching this TypeScript type:
 
 Do not include any markdown backticks or explanation. Return ONLY the JSON object.`;
 
-    const modelName = "gemini-2.0-flash";
+    const modelName =
+      "gemini-3.6-flash";
 
     try {
       const model = genAI.getGenerativeModel({
