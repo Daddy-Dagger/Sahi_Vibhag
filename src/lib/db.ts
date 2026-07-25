@@ -28,6 +28,78 @@ if (hasRealDb) {
 
 // File-based Mock Database Path (using os.tmpdir to prevent Next.js dev reloads)
 const MOCK_DB_PATH = path.join(os.tmpdir(), "sahi_vibhag_mock_db.json");
+const MOCK_USERS_PATH = path.join(os.tmpdir(), "sahi_vibhag_mock_users.json");
+
+export interface MockUser {
+  id: string;
+  email: string;
+  name: string;
+  password: string;
+  role: "CONSUMER" | "OFFICER";
+  department?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const INITIAL_MOCK_USERS: MockUser[] = [
+  {
+    id: "user-officer-1",
+    email: "officer@sahivibhag.gov.in",
+    name: "Officer Rajesh Kumar",
+    password: "officer123",
+    role: "OFFICER",
+    department: "Public Works Department (PWD)",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    id: "user-officer-2",
+    email: "officer.muni@sahivibhag.gov.in",
+    name: "Inspector Suresh Sharma",
+    password: "officer123",
+    role: "OFFICER",
+    department: "Municipal Corporation",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    id: "user-consumer-1",
+    email: "citizen@sahivibhag.gov.in",
+    name: "Amit Sharma",
+    password: "consumer123",
+    role: "CONSUMER",
+    department: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+  {
+    id: "user-consumer-2",
+    email: "consumer@gmail.com",
+    name: "Sonia Gupta",
+    password: "consumer123",
+    role: "CONSUMER",
+    department: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+];
+
+const readMockUsers = (): MockUser[] => {
+  if (!fs.existsSync(MOCK_USERS_PATH)) {
+    fs.writeFileSync(MOCK_USERS_PATH, JSON.stringify(INITIAL_MOCK_USERS, null, 2), "utf8");
+    return INITIAL_MOCK_USERS;
+  }
+  try {
+    const data = fs.readFileSync(MOCK_USERS_PATH, "utf8");
+    return JSON.parse(data);
+  } catch (e) {
+    return INITIAL_MOCK_USERS;
+  }
+};
+
+const writeMockUsers = (users: MockUser[]) => {
+  fs.writeFileSync(MOCK_USERS_PATH, JSON.stringify(users, null, 2), "utf8");
+};
 
 // Helper to read/write mock data
 const readMockDb = (): Complaint[] => {
@@ -156,6 +228,42 @@ const writeMockDb = (data: Complaint[]) => {
 
 // Mock Client Implementation mimicking Prisma Client API
 const mockDb = {
+  user: {
+    findUnique: async (args: { where: { id?: string; email?: string } }) => {
+      const users = readMockUsers();
+      if (args.where.id) return users.find((u) => u.id === args.where.id) || null;
+      if (args.where.email) return users.find((u) => u.email.toLowerCase() === args.where.email?.toLowerCase()) || null;
+      return null;
+    },
+    findFirst: async (args?: { where?: any }) => {
+      const users = readMockUsers();
+      if (!args?.where) return users[0] || null;
+      return users.find((u) => {
+        for (const key in args.where) {
+          if (key === "email" && u.email.toLowerCase() !== args.where.email?.toLowerCase()) return false;
+          if (key === "role" && u.role !== args.where.role) return false;
+        }
+        return true;
+      }) || null;
+    },
+    findMany: async () => readMockUsers(),
+    create: async (args: { data: any }) => {
+      const users = readMockUsers();
+      const newUser: MockUser = {
+        id: args.data.id || `user-${Date.now()}`,
+        email: args.data.email,
+        name: args.data.name,
+        password: args.data.password,
+        role: args.data.role || "CONSUMER",
+        department: args.data.department || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      users.push(newUser);
+      writeMockUsers(users);
+      return newUser;
+    },
+  },
   complaint: {
     findMany: async (args?: {
       orderBy?: { [key: string]: "asc" | "desc" };
@@ -169,7 +277,6 @@ const mockDb = {
           for (const key in args.where) {
             const condition = args.where[key];
             if (typeof condition === "object" && condition !== null) {
-              // Handle nested conditions if needed (like 'not', 'in', etc.)
               if ("equals" in condition && item[key as keyof Complaint] !== condition.equals) {
                 return false;
               }
@@ -259,7 +366,6 @@ const mockDb = {
       const updated: Complaint = {
         ...existing,
         ...args.data,
-        // Ensure complex types stay stringified in mock database
         missingInformation: args.data.missingInformation !== undefined
           ? (typeof args.data.missingInformation === "string" ? args.data.missingInformation : JSON.stringify(args.data.missingInformation))
           : existing.missingInformation,
@@ -301,3 +407,4 @@ export const isMockDb = !hasRealDb;
 console.log(
   `[Sahi Vibhag AI DB] Using ${isMockDb ? "local JSON File Mock Database (temporary storage)" : "Neon PostgreSQL Server"}`
 );
+

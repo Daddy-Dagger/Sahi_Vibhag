@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Button from "@/components/Button";
 import {
@@ -19,7 +20,10 @@ import {
   CheckCircle,
   XCircle,
   Inbox,
-  AlertCircle
+  AlertCircle,
+  UserCheck,
+  LogOut,
+  ShieldCheck
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -35,7 +39,9 @@ import {
 } from "recharts";
 
 export default function OfficerDashboard() {
+  const router = useRouter();
   const [complaints, setComplaints] = useState<any[]>([]);
+  const [officerUser, setOfficerUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
   
@@ -51,32 +57,41 @@ export default function OfficerDashboard() {
   const [updateDept, setUpdateDept] = useState("");
   const [actionSaving, setActionSaving] = useState(false);
 
-  // Fetch complaints
+  // Fetch complaints from secure officer endpoint
   const fetchComplaints = async (selectId?: string) => {
     try {
       setLoading(true);
-      const res = await fetch("/api/complaints");
+      const res = await fetch("/api/officer/complaints");
+      
+      if (res.status === 401 || res.status === 403) {
+        router.push("/officer/login?error=session_expired");
+        return;
+      }
+
       const data = await res.json();
-      setComplaints(data);
+      if (data.officer) {
+        setOfficerUser(data.officer);
+      }
+      const complaintsList = data.complaints || [];
+      setComplaints(complaintsList);
       
       // If a specific complaint needs to remain selected, find and refresh it
       if (selectId) {
-        const updated = data.find((c: any) => c.id === selectId);
+        const updated = complaintsList.find((c: any) => c.id === selectId);
         if (updated) {
           setSelectedComplaint(updated);
           setOfficerNotes(updated.officerNotes || "");
           setUpdateStatus(updated.status);
           setUpdateDept(updated.department);
         }
-      } else if (data.length > 0 && !selectedComplaint) {
-        // Default select first item
-        setSelectedComplaint(data[0]);
-        setOfficerNotes(data[0].officerNotes || "");
-        setUpdateStatus(data[0].status);
-        setUpdateDept(data[0].department);
+      } else if (complaintsList.length > 0 && !selectedComplaint) {
+        setSelectedComplaint(complaintsList[0]);
+        setOfficerNotes(complaintsList[0].officerNotes || "");
+        setUpdateStatus(complaintsList[0].status);
+        setUpdateDept(complaintsList[0].department);
       }
     } catch (e) {
-      console.error("Failed to load complaints", e);
+      console.error("Failed to load officer complaints", e);
     } finally {
       setLoading(false);
     }
@@ -98,7 +113,7 @@ export default function OfficerDashboard() {
     setActionSaving(true);
 
     try {
-      const response = await fetch(`/api/complaints/${selectedComplaint.id}`, {
+      const response = await fetch(`/api/officer/complaints/${selectedComplaint.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -109,12 +124,11 @@ export default function OfficerDashboard() {
       });
 
       if (response.ok) {
-        // Refresh complaints list and keep current item selected
         await fetchComplaints(selectedComplaint.id);
         alert("Action logs updated and archived successfully.");
       } else {
         const errorData = await response.json();
-        alert("Failed to update grievance: " + errorData.error);
+        alert("Failed to update grievance: " + (errorData.error || response.statusText));
       }
     } catch (e) {
       console.error(e);
@@ -123,6 +137,12 @@ export default function OfficerDashboard() {
       setActionSaving(false);
     }
   };
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/officer/login");
+  };
+
 
   // Compute metrics
   const totalCount = complaints.length;
@@ -186,22 +206,50 @@ export default function OfficerDashboard() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
-            <Building className="w-8 h-8 text-primary-blue" />
-            Officer Dashboard
-          </h1>
-          <p className="text-sm text-muted">
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
+              <Building className="w-8 h-8 text-primary-blue" />
+              Officer Dashboard
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/30 uppercase tracking-wider">
+              OFFICER SECURE SESSION
+            </span>
+          </div>
+          <p className="text-sm text-muted mt-1">
             Department administrative portal. Review, re-route, and sign off on civic grievances.
           </p>
+
+          {/* Active Officer Identity Badge */}
+          {officerUser && (
+            <div className="mt-3 inline-flex items-center gap-3 px-3 py-1.5 rounded-xl bg-card border border-border/80 text-xs shadow-sm">
+              <UserCheck className="w-4 h-4 text-emerald-500" />
+              <div>
+                <span className="font-bold text-foreground">{officerUser.name}</span>
+                <span className="text-muted text-[11px] ml-2">({officerUser.department || "All Departments"})</span>
+              </div>
+              <span className="text-muted text-[10px] border-l border-border pl-2">{officerUser.email}</span>
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => fetchComplaints(selectedComplaint?.id)}
-          className="flex items-center gap-2 px-4 py-2 border border-border bg-card rounded-xl text-xs font-semibold hover:bg-muted-background transition shadow-premium"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          Refresh Database
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchComplaints(selectedComplaint?.id)}
+            className="flex items-center gap-2 px-4 py-2 border border-border bg-card rounded-xl text-xs font-semibold hover:bg-muted-background transition shadow-premium"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh Database
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 px-4 py-2 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl text-xs font-semibold transition"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sign Out
+          </button>
+        </div>
       </div>
+
 
       {/* Metrics Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
