@@ -1,260 +1,378 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { OpenAI } from "openai";
+import { resolveJurisdictionAndRoute, RoutingOutput } from "./jurisdictionEngine";
 
-export interface AIAnalysisResult {
+export interface RawAIExtractedResult {
   title: string;
   translatedDescription: string | null;
-  department: string;
-  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   category: string;
+  subcategory: string;
+  location: string | null;
+  state: string | null;
+  city: string | null;
+  district: string | null;
+  landmark: string | null;
+  urgency: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   summary: string;
   missingInformation: string[];
   evidenceChecklist: Array<{ name: string; required: boolean; submitted: boolean }>;
-  location: string | null;
   confidence: number;
   provider?: "OpenAI" | "Gemini" | "Fallback";
 }
 
-// Fallback keyword-based analysis when AI keys are not present or fail
-const performFallbackAnalysis = (text: string): AIAnalysisResult => {
+export interface AIAnalysisResult extends RawAIExtractedResult {
+  department: string; // Matches assignedAuthority for backwards compatibility
+  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"; // Matches urgency for backwards compatibility
+  
+  // Stage 2 Jurisdiction Engine outputs
+  extractedLocation: string;
+  detectedState: string;
+  detectedDistrict: string;
+  detectedCity: string;
+  detectedMunicipality: string;
+  assignedAuthority: string;
+  reasonForRouting: string;
+  routingConfidence: number;
+  locationMapped: boolean;
+  locationSuggestions?: string[];
+  locationErrorMessage?: string;
+}
+
+export interface AnalyzeOptions {
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+// Fallback keyword-based extraction when AI keys are not present or fail
+const performFallbackExtraction = (text: string): RawAIExtractedResult => {
   const t = text.toLowerCase();
-  let department = "General Administration";
   let category = "General Grievance";
-  let priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT" = "MEDIUM";
+  let subcategory = "General Issue";
+  let urgency: "LOW" | "MEDIUM" | "HIGH" | "URGENT" = "MEDIUM";
   let summary = "Civic grievance received.";
   let missingInformation: string[] = [];
   let evidenceChecklist: Array<{ name: string; required: boolean; submitted: boolean }> = [
     { name: "Photograph of the issue", required: true, submitted: false }
   ];
   let location: string | null = null;
+  let landmark: string | null = null;
+  let city: string | null = null;
+  let state: string | null = null;
+  let district: string | null = null;
   let confidence = 0.75;
   let title = "Civic Grievance";
 
-  // Title extraction
   if (text.length > 50) {
     title = text.slice(0, 47) + "...";
   } else {
     title = text;
   }
 
-  // Basic Location extraction (looking for common keywords)
-  const locationKeywords = ["near", "at", "in", "sector", "lane", "road", "colony", "nagar", "chowk"];
-  for (const keyword of locationKeywords) {
-    const idx = t.indexOf(keyword);
-    if (idx !== -1) {
-      const remaining = text.slice(idx);
-      const words = remaining.split(" ");
-      location = words.slice(0, 5).join(" "); // extract next few words
-      break;
+  // State detection in text
+  if (t.includes("punjab") || t.includes("mohali") || t.includes("amritsar") || t.includes("ludhiana")) {
+    state = "Punjab";
+  } else if (t.includes("delhi") || t.includes("rohini") || t.includes("dwarka") || t.includes("saket")) {
+    state = "Delhi";
+  } else if (t.includes("jammu") || t.includes("srinagar") || t.includes("kashmir")) {
+    state = "Jammu & Kashmir";
+  }
+
+  // City / District / Landmark detection
+  if (t.includes("mohali") || t.includes("phase 5") || t.includes("sas nagar")) {
+    city = "Mohali";
+    district = "SAS Nagar";
+    landmark = t.includes("phase 5") ? "Phase 5" : "Mohali";
+    location = "Phase 5 Mohali";
+  } else if (t.includes("jammu")) {
+    city = "Jammu";
+    district = "Jammu";
+    location = "Jammu";
+  } else if (t.includes("delhi")) {
+    city = "Delhi";
+    location = "Delhi";
+  }
+
+  // Basic Location extraction if not matched
+  if (!location) {
+    const locationKeywords = ["near", "at", "in", "sector", "lane", "road", "colony", "nagar", "chowk", "phase"];
+    for (const keyword of locationKeywords) {
+      const idx = t.indexOf(keyword);
+      if (idx !== -1) {
+        const remaining = text.slice(idx);
+        const words = remaining.split(" ");
+        location = words.slice(0, 5).join(" ");
+        break;
+      }
     }
   }
 
-  // Keyword Matching
+  // Keyword Extraction for Category
   if (t.includes("pothole") || t.includes("road") || t.includes("gadda") || t.includes("bridge") || t.includes("infrastructure")) {
-    department = "Public Works Department (PWD)";
-    category = "Roads & Infrastructure";
-    priority = t.includes("accident") || t.includes("broken") ? "HIGH" : "MEDIUM";
+    category = "Roads";
+    subcategory = "Road Damage / Potholes";
+    urgency = t.includes("accident") || t.includes("broken") ? "HIGH" : "MEDIUM";
     summary = "Complaint regarding road damage or potholes causing public inconvenience.";
     evidenceChecklist.push({ name: "Geo-tag/Coordinates", required: false, submitted: false });
     missingInformation.push("Specific landmark or street name");
     confidence = 0.88;
   } else if (t.includes("garbage") || t.includes("kachra") || t.includes("clean") || t.includes("sewer") || t.includes("drain") || t.includes("dog") || t.includes("kutta") || t.includes("waste")) {
-    department = "Municipal Corporation";
-    category = "Waste Management & Sanitation";
-    priority = t.includes("overflow") || t.includes("smell") ? "HIGH" : "MEDIUM";
+    category = "Garbage";
+    subcategory = "Waste Accumulation & Sanitation";
+    urgency = t.includes("overflow") || t.includes("smell") ? "HIGH" : "MEDIUM";
     summary = "Complaint regarding garbage accumulation, sewer blockage, or sanitation issues.";
     missingInformation.push("House number / lane number");
     confidence = 0.92;
   } else if (t.includes("light") || t.includes("electricity") || t.includes("power") || t.includes("bijli") || t.includes("wire") || t.includes("transformer")) {
-    department = "Power Development Department (PDD)";
-    category = "Electricity & Street Lighting";
-    priority = t.includes("spark") || t.includes("hanging wire") || t.includes("danger") ? "URGENT" : "HIGH";
+    category = "Electricity";
+    subcategory = t.includes("light") ? "Streetlight Malfunction" : "Power Outage / Transformer";
+    urgency = t.includes("spark") || t.includes("hanging wire") || t.includes("danger") ? "URGENT" : "HIGH";
     summary = "Grievance related to power cuts, faulty streetlights, or electrical hazards.";
     evidenceChecklist.push({ name: "Electricity Bill (if billing issue)", required: false, submitted: false });
     missingInformation.push("Pole number or electricity connection ID");
     confidence = 0.95;
   } else if (t.includes("water") || t.includes("paani") || t.includes("leak") || t.includes("tap") || t.includes("dirty")) {
-    department = "Water Supply Department (Jal Shakti)";
-    category = "Water & Sewage";
-    priority = t.includes("no water") || t.includes("dry") ? "HIGH" : "MEDIUM";
+    category = "Water";
+    subcategory = "Water Supply & Sewage";
+    urgency = t.includes("no water") || t.includes("dry") ? "HIGH" : "MEDIUM";
     summary = "Complaint concerning clean water supply, pipeline leakages, or contaminated water.";
     missingInformation.push("Zone / Sector name");
     confidence = 0.91;
   } else if (t.includes("traffic") || t.includes("parking") || t.includes("jam")) {
-    department = "Traffic Police";
-    category = "Traffic Control";
-    priority = "MEDIUM";
+    category = "Traffic";
+    subcategory = "Traffic Control & Parking";
+    urgency = "MEDIUM";
     summary = "Grievance relating to severe traffic congestion or illegal parking blocking movement.";
     confidence = 0.85;
   }
 
-  // Custom summary based on length
   if (text.length > 20) {
     summary = `Citizen reported: ${text.slice(0, 100)}${text.length > 100 ? "..." : ""}`;
   }
 
-  // Detect simple regional languages to mock translation
   let translatedDescription: string | null = null;
-  const hindiKeywords = ["hai", "ho", "gaya", "kuch", "pani", "sadak", "bijli", "gadda"];
-  const hasHindiKeywords = hindiKeywords.some(keyword => t.includes(keyword));
+  const hindiKeywords = ["hai", "ho", "gaya", "kuch", "pani", "sadak", "bijli", "gadda", "nahi", "aa", "rahi"];
+  const hasHindiKeywords = hindiKeywords.some((kw) => t.includes(kw));
   if (hasHindiKeywords) {
-    translatedDescription = text; // Just mock the original text as Hindi
+    translatedDescription = text;
   }
 
   return {
     title,
     translatedDescription,
-    department,
-    priority,
     category,
+    subcategory,
+    location,
+    state,
+    city,
+    district,
+    landmark,
+    urgency,
     summary,
     missingInformation,
     evidenceChecklist,
-    location,
     confidence,
     provider: "Fallback",
   };
 };
 
-async function analyzeWithOpenAI(text: string, apiKey: string): Promise<AIAnalysisResult> {
+async function extractWithOpenAI(text: string, apiKey: string): Promise<RawAIExtractedResult> {
   const openai = new OpenAI({ apiKey });
   const modelName = process.env.OPENAI_MODEL || "gpt-4o";
 
-  const prompt = `You are "Sahi Vibhag AI", a production-grade AI-powered multilingual civic grievance assistant for the Government of India, developed for the IIT Jammu AI Hackathon.
-Your goal is to parse a citizen's complaint (which might be in Hindi, English, Hinglish, Urdu, Dogri, or other regional languages), translate regional complaints to Hindi for government records, extract key structured information, determine the correct department, assign an appropriate priority, summarize it in a professional government-ready format, and detect missing information.
+  const prompt = `You are "Sahi Vibhag AI Stage 1 Extractor", an AI information extraction engine for Indian civic grievances.
+Your ONLY role is to extract structured information from the citizen's complaint.
+DO NOT DECIDE THE FINAL GOVERNMENT AUTHORITY OR DEPARTMENT (e.g. Do not output PSPCL, MCD, PWD, etc.).
 
 Analyze this citizen complaint:
 "${text}"
 
-Return a structured JSON object matching this schema:
+Return a JSON object with this exact schema:
 {
-  "title": string, // A concise, clear title in English summarizing the issue
-  "translatedDescription": string | null, // If original text is in Hindi/Hinglish/Urdu/Dogri etc, translate to clear formal Hindi. If original is in English, return null.
-  "department": string, // Must be one of: "Public Works Department (PWD)", "Municipal Corporation", "Power Development Department (PDD)", "Water Supply Department (Jal Shakti)", "Traffic Police", "General Administration"
-  "priority": "LOW" | "MEDIUM" | "HIGH" | "URGENT", // Choose priority. Safety hazards/broken electric wires = URGENT. Public blockages = HIGH. Standard issues = MEDIUM. General feedback = LOW.
-  "category": string, // A 2-3 word category like "Sewerage Overflows", "Road Potholes", "Streetlight Malfunction", "Drinking Water Supply"
-  "summary": string, // A concise, formal, government-ready summary (1-2 sentences) of the grievance in English.
-  "missingInformation": string[], // Critical details not mentioned in complaint needed to fix it (e.g. ["Specific house number", "Pole identification number", "Landmark"])
-  "evidenceChecklist": Array<{ name: string, required: boolean, submitted: boolean }>, // Suggest 1-2 evidence files that could be uploaded
-  "location": string | null, // Extracted landmark, street, sector, or city mentioned in text. Null if none found.
-  "confidence": number // Float between 0.0 and 1.0 indicating AI routing confidence
+  "title": "Concise English title summarizing the complaint",
+  "translatedDescription": "If original is in Hindi/Hinglish/Urdu/Dogri etc, translate to formal Hindi. If already English, return null.",
+  "category": "Broad complaint category, e.g. 'Electricity', 'Roads', 'Water', 'Garbage', 'Streetlights', 'Traffic'",
+  "subcategory": "2-3 word subcategory, e.g. 'Power Outage', 'Potholes', 'Pipeline Leakage', 'Waste Accumulation'",
+  "location": "Extracted landmark, street, sector, locality, or city string mentioned in text (or null)",
+  "state": "State mentioned in text if any, e.g. 'Punjab', 'Delhi', 'Jammu & Kashmir' (or null)",
+  "city": "City/town mentioned in text if any, e.g. 'Mohali', 'Jammu', 'New Delhi' (or null)",
+  "district": "District mentioned in text if any, e.g. 'SAS Nagar' (or null)",
+  "landmark": "Specific landmark or sector, e.g. 'Phase 5' (or null)",
+  "urgency": "Choose one: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'",
+  "summary": "1-2 sentence formal government summary of the grievance in English",
+  "missingInformation": ["Critical missing details, e.g. Pole ID, House No"],
+  "evidenceChecklist": [{"name": "Photo of issue", "required": true, "submitted": false}],
+  "confidence": 0.95
 }`;
 
   const completion = await openai.chat.completions.create({
     model: modelName,
     messages: [
-      {
-        role: "system",
-        content: "You are an AI assistant that analyzes civic complaints and returns structured JSON output strictly matching the requested format.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
+      { role: "system", content: "You extract structured information from civic complaints into JSON. Do not determine final government authorities." },
+      { role: "user", content: prompt },
     ],
     response_format: { type: "json_object" },
-    temperature: 0.2,
+    temperature: 0.1,
   });
 
   const responseText = completion.choices[0]?.message?.content || "";
-  const jsonResult = JSON.parse(responseText.trim());
+  const json = JSON.parse(responseText.trim());
 
   return {
-    title: jsonResult.title || "Civic Complaint",
-    translatedDescription: jsonResult.translatedDescription || null,
-    department: jsonResult.department || "General Administration",
-    priority: jsonResult.priority || "MEDIUM",
-    category: jsonResult.category || "General",
-    summary: jsonResult.summary || "",
-    missingInformation: jsonResult.missingInformation || jsonResult.missing_information || [],
-    evidenceChecklist: jsonResult.evidenceChecklist || jsonResult.evidence_checklist || [
-      { name: "Photograph of the issue", required: true, submitted: false }
+    title: json.title || "Civic Complaint",
+    translatedDescription: json.translatedDescription || null,
+    category: json.category || "General",
+    subcategory: json.subcategory || json.category || "General Grievance",
+    location: json.location || null,
+    state: json.state || null,
+    city: json.city || null,
+    district: json.district || null,
+    landmark: json.landmark || null,
+    urgency: json.urgency || "MEDIUM",
+    summary: json.summary || "",
+    missingInformation: json.missingInformation || json.missing_information || [],
+    evidenceChecklist: json.evidenceChecklist || json.evidence_checklist || [
+      { name: "Photograph of the issue", required: true, submitted: false },
     ],
-    location: jsonResult.location || null,
-    confidence: jsonResult.confidence || 0.95,
+    confidence: json.confidence || 0.95,
     provider: "OpenAI",
   };
 }
 
-async function analyzeWithGemini(text: string, apiKey: string): Promise<AIAnalysisResult> {
+async function extractWithGemini(text: string, apiKey: string): Promise<RawAIExtractedResult> {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const prompt = `You are "Sahi Vibhag AI", a production-grade AI-powered multilingual civic grievance assistant for the Government of India, developed for the IIT Jammu AI Hackathon.
-Your goal is to parse a citizen's complaint (which might be in Hindi, English, Hinglish, Urdu, Dogri, or other regional languages), translate regional complaints to Hindi for government records, extract key structured information, determine the correct department, assign an appropriate priority, summarize it in a professional government-ready format, and detect missing information.
+  const modelName = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+
+  const prompt = `You are "Sahi Vibhag AI Stage 1 Extractor", an AI information extraction engine for Indian civic grievances.
+Your ONLY role is to extract structured information from the citizen's complaint.
+IMPORTANT: DO NOT DECIDE THE FINAL GOVERNMENT AUTHORITY OR DEPARTMENT (e.g. Do not output PSPCL, MCD, PWD, etc.).
 
 Analyze this citizen complaint:
 "${text}"
 
-Return a structured JSON object strictly matching this TypeScript type:
+Return a JSON object with this exact schema:
 {
-  "title": string; // A concise, clear title in English summarizing the issue
-  "translatedDescription": string | null; // If the original text is in Hindi/Hinglish/Urdu/Dogri etc, translate it to clear formal Hindi. If the original text is in English, this should be null.
-  "department": string; // Must be one of: "Public Works Department (PWD)", "Municipal Corporation", "Power Development Department (PDD)", "Water Supply Department (Jal Shakti)", "Traffic Police", "General Administration"
-  "priority": "LOW" | "MEDIUM" | "HIGH" | "URGENT"; // Choose priority. Safety/hazards/broken electric wires are URGENT. Public blockages are HIGH. Standard issues are MEDIUM. General feedback is LOW.
-  "category": string; // A 2-3 word category like "Sewerage Overflows", "Road Potholes", "Streetlight Malfunction", "Drinking Water Supply"
-  "summary": string; // A concise, formal, government-ready summary (1-2 sentences) of the grievance in English.
-  "missingInformation": string[]; // Critical details not mentioned in the complaint that are needed to fix it (e.g. ["Specific house number", "Pole identification number", "Landmark"])
-  "evidenceChecklist": Array<{ name: string, required: boolean, submitted: boolean }>; // Suggest 1-2 evidence files that could be uploaded, e.g. [{ name: "Photo of pothole", required: true, submitted: false }]
-  "location": string | null; // Extracted landmark, street, sector, or city mentioned in the text. Null if none found.
-  "confidence": number; // Float between 0.0 and 1.0 indicating AI routing confidence
+  "title": "Concise English title summarizing the complaint",
+  "translatedDescription": "If original is in Hindi/Hinglish/Urdu/Dogri etc, translate to formal Hindi. If already English, return null.",
+  "category": "Broad complaint category, e.g. 'Electricity', 'Roads', 'Water', 'Garbage', 'Streetlights', 'Traffic'",
+  "subcategory": "2-3 word subcategory, e.g. 'Power Outage', 'Potholes', 'Pipeline Leakage', 'Waste Accumulation'",
+  "location": "Extracted landmark, street, sector, locality, or city string mentioned in text (or null)",
+  "state": "State mentioned in text if any, e.g. 'Punjab', 'Delhi', 'Jammu & Kashmir' (or null)",
+  "city": "City/town mentioned in text if any, e.g. 'Mohali', 'Jammu', 'New Delhi' (or null)",
+  "district": "District mentioned in text if any, e.g. 'SAS Nagar' (or null)",
+  "landmark": "Specific landmark or sector, e.g. 'Phase 5' (or null)",
+  "urgency": "Choose one: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'",
+  "summary": "1-2 sentence formal government summary of the grievance in English",
+  "missingInformation": ["Critical missing details, e.g. Pole ID, House No"],
+  "evidenceChecklist": [{"name": "Photo of issue", "required": true, "submitted": false}],
+  "confidence": 0.95
 }
 
-Do not include any markdown backticks or explanation. Return ONLY the JSON object.`;
+Return ONLY valid JSON. No markdown code blocks.`;
 
-  const modelName = process.env.GEMINI_MODEL || "gemini-3.6-flash";
   const model = genAI.getGenerativeModel({
     model: modelName,
     generationConfig: {
       responseMimeType: "application/json",
-    }
+    },
   });
 
   const result = await model.generateContent(prompt);
   const responseText = result.response.text();
-  const jsonResult = JSON.parse(responseText.trim());
+  const json = JSON.parse(responseText.trim());
 
   return {
-    title: jsonResult.title || "Civic Complaint",
-    translatedDescription: jsonResult.translatedDescription || null,
-    department: jsonResult.department || "General Administration",
-    priority: jsonResult.priority || "MEDIUM",
-    category: jsonResult.category || "General",
-    summary: jsonResult.summary || "",
-    missingInformation: jsonResult.missingInformation || jsonResult.missing_information || [],
-    evidenceChecklist: jsonResult.evidenceChecklist || jsonResult.evidence_checklist || [
-      { name: "Photograph of the issue", required: true, submitted: false }
+    title: json.title || "Civic Complaint",
+    translatedDescription: json.translatedDescription || null,
+    category: json.category || "General",
+    subcategory: json.subcategory || json.category || "General Grievance",
+    location: json.location || null,
+    state: json.state || null,
+    city: json.city || null,
+    district: json.district || null,
+    landmark: json.landmark || null,
+    urgency: json.urgency || "MEDIUM",
+    summary: json.summary || "",
+    missingInformation: json.missingInformation || json.missing_information || [],
+    evidenceChecklist: json.evidenceChecklist || json.evidence_checklist || [
+      { name: "Photograph of the issue", required: true, submitted: false },
     ],
-    location: jsonResult.location || null,
-    confidence: jsonResult.confidence || 0.90,
+    confidence: json.confidence || 0.90,
     provider: "Gemini",
   };
 }
 
-export async function analyzeComplaint(text: string): Promise<AIAnalysisResult> {
+export async function analyzeComplaint(
+  text: string,
+  options?: AnalyzeOptions
+): Promise<AIAnalysisResult> {
   const openAiKey = process.env.OPENAI_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY;
 
-  // 1. Primary AI Provider: OpenAI (gpt-4o)
+  let extraction: RawAIExtractedResult;
+
+  // 1. Stage 1 Extraction: OpenAI -> Gemini -> Fallback
   if (openAiKey && openAiKey !== "MOCK_KEY" && openAiKey.trim() !== "") {
     try {
-      console.log("[Sahi Vibhag AI] Analyzing complaint using OpenAI (gpt-4o)...");
-      return await analyzeWithOpenAI(text, openAiKey);
+      console.log("[Sahi Vibhag AI] Stage 1 AI Extraction using OpenAI...");
+      extraction = await extractWithOpenAI(text, openAiKey);
     } catch (error) {
-      console.warn("[Sahi Vibhag AI] OpenAI API call failed. Falling back to Gemini...", error);
+      console.warn("[Sahi Vibhag AI] OpenAI failed. Falling back to Gemini...", error);
+      if (geminiKey && geminiKey !== "MOCK_KEY" && geminiKey.trim() !== "") {
+        try {
+          extraction = await extractWithGemini(text, geminiKey);
+        } catch (gErr) {
+          console.warn("[Sahi Vibhag AI] Gemini failed. Falling back to keyword extraction...", gErr);
+          extraction = performFallbackExtraction(text);
+        }
+      } else {
+        extraction = performFallbackExtraction(text);
+      }
     }
-  }
-
-  // 2. Secondary AI Provider / Fallback: Gemini (gemini-3.6-flash)
-  if (geminiKey && geminiKey !== "MOCK_KEY" && geminiKey.trim() !== "") {
+  } else if (geminiKey && geminiKey !== "MOCK_KEY" && geminiKey.trim() !== "") {
     try {
-      console.log("[Sahi Vibhag AI] Analyzing complaint using Gemini fallback...");
-      return await analyzeWithGemini(text, geminiKey);
-    } catch (error) {
-      console.warn("[Sahi Vibhag AI] Gemini API call failed. Falling back to keyword analysis...", error);
+      console.log("[Sahi Vibhag AI] Stage 1 AI Extraction using Gemini...");
+      extraction = await extractWithGemini(text, geminiKey);
+    } catch (gErr) {
+      console.warn("[Sahi Vibhag AI] Gemini failed. Falling back to keyword extraction...", gErr);
+      extraction = performFallbackExtraction(text);
     }
+  } else {
+    console.log("[Sahi Vibhag AI] No AI keys present. Using Fallback keyword extraction.");
+    extraction = performFallbackExtraction(text);
   }
 
-  // 3. Fallback: Keyword-based rule engine
-  console.log("[Sahi Vibhag AI] No valid primary/secondary AI keys or services reachable. Using fallback keyword analysis.");
-  return performFallbackAnalysis(text);
-}
+  // 2. Stage 2 Deterministic Jurisdiction Engine & Authority Resolver
+  console.log("[Sahi Vibhag AI] Stage 2 Deterministic Jurisdiction Engine running...");
+  const routingResult: RoutingOutput = await resolveJurisdictionAndRoute({
+    text: text,
+    category: extraction.category,
+    subcategory: extraction.subcategory,
+    location: extraction.location,
+    state: extraction.state,
+    city: extraction.city,
+    district: extraction.district,
+    landmark: extraction.landmark,
+    latitude: options?.latitude,
+    longitude: options?.longitude,
+    aiConfidence: extraction.confidence,
+  });
 
+  return {
+    ...extraction,
+    priority: extraction.urgency,
+    department: routingResult.assignedAuthority, // For backwards compatibility
+    
+    // Stage 2 Routing Engine attributes
+    extractedLocation: routingResult.extractedLocation,
+    detectedState: routingResult.detectedState,
+    detectedDistrict: routingResult.detectedDistrict,
+    detectedCity: routingResult.detectedCity,
+    detectedMunicipality: routingResult.detectedMunicipality,
+    assignedAuthority: routingResult.assignedAuthority,
+    reasonForRouting: routingResult.reasonForRouting,
+    routingConfidence: routingResult.routingConfidence,
+    locationMapped: routingResult.locationMapped,
+    locationSuggestions: routingResult.locationSuggestions,
+    locationErrorMessage: routingResult.locationErrorMessage,
+  };
+}

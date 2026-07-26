@@ -51,6 +51,14 @@ model Complaint {
   city                  String?
   state                 String?
   pincode               String?
+  district              String?
+  municipality          String?
+  subcategory           String?
+  assignedAuthority     String?
+  routingReason         String?
+  aiConfidence          Float?   @default(1.0)
+  routingConfidence     Float?   @default(1.0)
+  locationMapped        Boolean? @default(true)
   confidence            Float    @default(1.0)
   audioUrl              String?
   officerNotes          String?

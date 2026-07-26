@@ -9,7 +9,6 @@ export async function GET() {
       },
     });
 
-    // Parse stringified JSON fields for safety (mainly for mockDb compatibility)
     const parsedComplaints = complaints.map((complaint) => {
       let missingInfo = [];
       let checklist = [];
@@ -69,6 +68,7 @@ export async function POST(req: NextRequest) {
       status = "PENDING",
       priority = "MEDIUM",
       category,
+      subcategory,
       summary,
       missingInformation = [],
       evidenceChecklist = [],
@@ -81,26 +81,35 @@ export async function POST(req: NextRequest) {
       formattedAddress,
       landmark,
       city,
+      district,
+      municipality,
       state,
       pincode,
+      assignedAuthority,
+      routingReason,
+      aiConfidence,
+      routingConfidence,
+      locationMapped = true,
       confidence = 1.0,
       audioUrl = null,
     } = body;
 
     // Validation
-    if (!title || !description || !department || !category || !summary) {
+    if (!title || !description || (!department && !assignedAuthority) || !category || !summary) {
       return NextResponse.json(
-        { error: "Missing required fields (title, description, department, category, summary)" },
+        { error: "Missing required fields (title, description, department/assignedAuthority, category, summary)" },
         { status: 400 }
       );
     }
+
+    const finalDepartment = assignedAuthority || department;
 
     // Prepare initial timeline event
     const initialTimeline = [
       {
         status: "SUBMITTED",
         timestamp: new Date().toISOString(),
-        note: "Grievance received and auto-routed by Sahi Vibhag AI.",
+        note: `Grievance received and deterministically routed to ${finalDepartment}.`,
       },
     ];
 
@@ -109,10 +118,11 @@ export async function POST(req: NextRequest) {
         title,
         description,
         translatedDescription: translatedDescription || null,
-        department,
+        department: finalDepartment,
         status,
         priority,
         category,
+        subcategory: subcategory || category,
         summary,
         missingInformation: JSON.stringify(missingInformation),
         evidenceChecklist: JSON.stringify(evidenceChecklist),
@@ -125,9 +135,16 @@ export async function POST(req: NextRequest) {
         formattedAddress: formattedAddress || location || null,
         landmark: landmark || null,
         city: city || null,
+        district: district || null,
+        municipality: municipality || null,
         state: state || null,
         pincode: pincode || null,
-        confidence,
+        assignedAuthority: finalDepartment,
+        routingReason: routingReason || null,
+        aiConfidence: aiConfidence !== undefined && aiConfidence !== null ? Number(aiConfidence) : Number(confidence),
+        routingConfidence: routingConfidence !== undefined && routingConfidence !== null ? Number(routingConfidence) : Number(confidence),
+        locationMapped: Boolean(locationMapped),
+        confidence: Number(confidence),
         audioUrl,
         officerNotes: null,
         timeline: JSON.stringify(initialTimeline),

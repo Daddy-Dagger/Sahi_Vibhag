@@ -3,7 +3,8 @@ import { analyzeComplaint } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json();
+    const body = await req.json();
+    const { text, latitude, longitude } = body;
 
     if (!text || typeof text !== "string" || text.trim() === "") {
       return NextResponse.json(
@@ -12,7 +13,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const analysis = await analyzeComplaint(text);
+    const analysis = await analyzeComplaint(text, {
+      latitude: latitude !== undefined && latitude !== null ? Number(latitude) : undefined,
+      longitude: longitude !== undefined && longitude !== null ? Number(longitude) : undefined,
+    });
+
     return NextResponse.json(analysis);
   } catch (error: any) {
     console.error("AI Analysis Endpoint Error:", error);

@@ -127,7 +127,11 @@ export default function CitizenPortal() {
       const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: complaintText }),
+        body: JSON.stringify({
+          text: complaintText,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+        }),
       });
       const data = await response.json();
       setAnalysisResult(data);
@@ -161,23 +165,31 @@ export default function CitizenPortal() {
           title: analysisResult.title,
           description: complaintText,
           translatedDescription: analysisResult.translatedDescription,
-          department: analysisResult.department,
+          department: analysisResult.assignedAuthority || analysisResult.department,
           priority: analysisResult.priority,
           category: analysisResult.category,
+          subcategory: analysisResult.subcategory,
           summary: analysisResult.summary,
           missingInformation: analysisResult.missingInformation,
           evidenceChecklist: analysisResult.evidenceChecklist,
           citizenName: name || "Anonymous Citizen",
           citizenPhone: phone || "Not Provided",
-          location: locationData.formattedAddress || analysisResult.location || "Unknown Location",
+          location: locationData.formattedAddress || analysisResult.extractedLocation || analysisResult.location || "Unknown Location",
           latitude: locationData.latitude,
           longitude: locationData.longitude,
           accuracy: locationData.accuracy,
-          formattedAddress: locationData.formattedAddress || analysisResult.location || "",
-          landmark: locationData.landmark || "",
-          city: locationData.city || "",
-          state: locationData.state || "",
+          formattedAddress: locationData.formattedAddress || analysisResult.extractedLocation || "",
+          landmark: locationData.landmark || analysisResult.landmark || "",
+          city: locationData.city || analysisResult.detectedCity || "",
+          district: analysisResult.detectedDistrict || "",
+          municipality: analysisResult.detectedMunicipality || "",
+          state: locationData.state || analysisResult.detectedState || "",
           pincode: locationData.pincode || "",
+          assignedAuthority: analysisResult.assignedAuthority || analysisResult.department,
+          routingReason: analysisResult.reasonForRouting || "",
+          aiConfidence: analysisResult.confidence,
+          routingConfidence: analysisResult.routingConfidence || analysisResult.confidence,
+          locationMapped: analysisResult.locationMapped !== undefined ? analysisResult.locationMapped : true,
           confidence: analysisResult.confidence,
         }),
       });
@@ -382,31 +394,94 @@ export default function CitizenPortal() {
                     animate={{ opacity: 1, y: 0 }}
                     className="rounded-2xl border border-border bg-card p-6 shadow-premium space-y-6"
                   >
-                    {/* Routing Confidence Bar */}
-                    <div className="flex justify-between items-center pb-3 border-b border-border">
+                    {/* Stage 1 AI & Stage 2 Routing Engine Header */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-3 border-b border-border gap-2">
                       <div>
-                        <span className="text-[10px] text-muted block uppercase font-bold">Analysis Engine</span>
-                        <span className="text-xs font-bold text-foreground">Gemini 2.5 routing sheet generated</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-muted block uppercase font-bold">Confidence Score</span>
-                        <span className="text-sm font-extrabold text-primary-blue">
-                          {Math.round(analysisResult.confidence * 100)}% Match
+                        <span className="text-[10px] text-muted block uppercase font-bold tracking-wider">Routing Pipeline</span>
+                        <span className="text-xs font-extrabold text-foreground flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-primary-orange" />
+                          Stage 1 AI Extraction → Stage 2 Jurisdiction Engine
                         </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] bg-primary-blue/10 text-primary-blue font-bold px-2 py-1 rounded-lg border border-primary-blue/20">
+                          AI: {Math.round(analysisResult.confidence * 100)}%
+                        </span>
+                        <span className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold px-2 py-1 rounded-lg border border-emerald-500/20">
+                          Routing: {Math.round((analysisResult.routingConfidence || analysisResult.confidence) * 100)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Ambiguity Alert Banner (Bonus Feature) */}
+                    {analysisResult.locationMapped === false && (
+                      <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+                        <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-xs">
+                          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span>Location could not be mapped confidently.</span>
+                        </div>
+                        <p className="text-[11px] text-muted pl-6">
+                          Please suggest one of the following to resolve exact jurisdiction:
+                        </p>
+                        <div className="flex flex-wrap gap-2 pl-6 pt-1">
+                          {(analysisResult.locationSuggestions || ["Nearby landmark", "Pin location on map", "Pincode"]).map((sug: string, idx: number) => (
+                            <span key={idx} className="text-[10px] bg-card border border-amber-500/30 text-amber-600 px-2 py-0.5 rounded-full font-semibold">
+                              💡 {sug}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Deterministic Routing Breakdown Grid */}
+                    <div className="rounded-xl border border-border bg-muted-background/30 p-4 space-y-3">
+                      <h4 className="text-xs font-extrabold uppercase text-muted tracking-wider flex items-center gap-1.5">
+                        <Building className="w-4 h-4 text-primary-blue" />
+                        Determined Authority & Jurisdiction
+                      </h4>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="bg-card p-2.5 rounded-lg border border-border">
+                          <span className="text-[9px] uppercase font-bold text-muted block">Category</span>
+                          <span className="font-extrabold text-foreground">{analysisResult.category}</span>
+                        </div>
+                        <div className="bg-card p-2.5 rounded-lg border border-border">
+                          <span className="text-[9px] uppercase font-bold text-muted block">Detected State</span>
+                          <span className="font-extrabold text-primary-blue">{analysisResult.detectedState || "Punjab"}</span>
+                        </div>
+                        <div className="bg-card p-2.5 rounded-lg border border-border">
+                          <span className="text-[9px] uppercase font-bold text-muted block">Detected District</span>
+                          <span className="font-extrabold text-foreground">{analysisResult.detectedDistrict || "SAS Nagar"}</span>
+                        </div>
+                        <div className="bg-card p-2.5 rounded-lg border border-border sm:col-span-2">
+                          <span className="text-[9px] uppercase font-bold text-muted block">Extracted Location</span>
+                          <span className="font-bold text-foreground truncate block">{analysisResult.extractedLocation || analysisResult.location || "Not mentioned"}</span>
+                        </div>
+                        <div className="bg-card p-2.5 rounded-lg border border-border">
+                          <span className="text-[9px] uppercase font-bold text-muted block">Municipality</span>
+                          <span className="font-bold text-foreground truncate block">{analysisResult.detectedMunicipality || "Local Corporation"}</span>
+                        </div>
+                      </div>
+
+                      {/* Assigned Authority Box */}
+                      <div className="p-3 bg-primary-blue/10 border border-primary-blue/20 rounded-xl">
+                        <span className="text-[9px] uppercase font-bold text-primary-blue block">Assigned Government Authority</span>
+                        <span className="text-sm font-black text-foreground">
+                          {analysisResult.assignedAuthority || analysisResult.department}
+                        </span>
+                      </div>
+
+                      {/* Reason for Routing Box */}
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                        <span className="text-[9px] uppercase font-bold text-emerald-600 block mb-0.5">Reason for Routing</span>
+                        <p className="text-xs text-foreground font-medium italic">
+                          {analysisResult.reasonForRouting || `Complaints for ${analysisResult.category} in ${analysisResult.detectedState || "this jurisdiction"} are handled by ${analysisResult.assignedAuthority || analysisResult.department}.`}
+                        </p>
                       </div>
                     </div>
 
                     {/* Metadata Badges */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Department */}
-                      <div className="p-3.5 bg-muted-background rounded-xl border border-border flex items-start gap-2.5">
-                        <Building className="w-5 h-5 text-primary-blue mt-0.5" />
-                        <div>
-                          <span className="text-[9px] uppercase font-bold text-muted block">Suggested Department</span>
-                          <span className="text-xs font-extrabold text-foreground">{analysisResult.department}</span>
-                        </div>
-                      </div>
-
                       {/* Priority */}
                       <div className="p-3.5 bg-muted-background rounded-xl border border-border flex items-start gap-2.5">
                         <BadgeAlert className={`w-5 h-5 mt-0.5 ${
@@ -427,16 +502,14 @@ export default function CitizenPortal() {
                           </span>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Location */}
-                    <div className="p-3.5 bg-muted-background rounded-xl border border-border flex items-start gap-2.5">
-                      <MapPin className="w-5 h-5 text-primary-orange mt-0.5" />
-                      <div className="w-full">
-                        <span className="text-[9px] uppercase font-bold text-muted block">Extracted Location Landmark</span>
-                        <span className="text-xs font-bold text-foreground">
-                          {analysisResult.location || "Not mentioned - Click evidence checklist to supply landmark"}
-                        </span>
+                      {/* Subcategory */}
+                      <div className="p-3.5 bg-muted-background rounded-xl border border-border flex items-start gap-2.5">
+                        <MapPin className="w-5 h-5 text-primary-orange mt-0.5" />
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-muted block">Issue Subcategory</span>
+                          <span className="text-xs font-extrabold text-foreground">{analysisResult.subcategory || analysisResult.category}</span>
+                        </div>
                       </div>
                     </div>
 

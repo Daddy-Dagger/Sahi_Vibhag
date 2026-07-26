@@ -173,6 +173,66 @@ export default function ComplaintDetails({ params }: ComplaintDetailsProps) {
         {/* Left Side: Summary, Statement, MAP Simulation */}
         <div className="lg:col-span-7 space-y-6">
           
+          {/* Deterministic Jurisdiction Routing Card */}
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-premium space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-border">
+              <div>
+                <span className="text-[10px] text-muted block uppercase font-bold tracking-wider">Deterministic Pipeline Output</span>
+                <h3 className="text-sm font-extrabold text-foreground flex items-center gap-1.5">
+                  <Building className="w-4 h-4 text-primary-blue" />
+                  Government Authority & Jurisdiction Mapping
+                </h3>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-[10px] bg-primary-blue/10 text-primary-blue font-bold px-2 py-0.5 rounded-full border border-primary-blue/20">
+                  AI: {Math.round((complaint.aiConfidence || complaint.confidence) * 100)}%
+                </span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Routing: {Math.round((complaint.routingConfidence || complaint.confidence) * 100)}%
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              <div className="bg-muted-background/40 p-2.5 rounded-xl border border-border">
+                <span className="text-[9px] uppercase font-bold text-muted block">Category</span>
+                <span className="font-extrabold text-foreground">{complaint.category}</span>
+              </div>
+              <div className="bg-muted-background/40 p-2.5 rounded-xl border border-border">
+                <span className="text-[9px] uppercase font-bold text-muted block">Detected State</span>
+                <span className="font-extrabold text-primary-blue">{complaint.state || "Punjab"}</span>
+              </div>
+              <div className="bg-muted-background/40 p-2.5 rounded-xl border border-border">
+                <span className="text-[9px] uppercase font-bold text-muted block">Detected District</span>
+                <span className="font-extrabold text-foreground">{complaint.district || "SAS Nagar"}</span>
+              </div>
+              <div className="bg-muted-background/40 p-2.5 rounded-xl border border-border sm:col-span-2">
+                <span className="text-[9px] uppercase font-bold text-muted block">Extracted Location</span>
+                <span className="font-bold text-foreground truncate block">{complaint.landmark || complaint.location || complaint.formattedAddress || "Not specified"}</span>
+              </div>
+              <div className="bg-muted-background/40 p-2.5 rounded-xl border border-border">
+                <span className="text-[9px] uppercase font-bold text-muted block">Municipality</span>
+                <span className="font-bold text-foreground truncate block">{complaint.municipality || "Local Corporation"}</span>
+              </div>
+            </div>
+
+            {/* Assigned Authority Box */}
+            <div className="p-3 bg-primary-blue/10 border border-primary-blue/20 rounded-xl">
+              <span className="text-[9px] uppercase font-bold text-primary-blue block">Assigned Government Authority</span>
+              <span className="text-sm font-black text-foreground">
+                {complaint.assignedAuthority || complaint.department}
+              </span>
+            </div>
+
+            {/* Reason Box */}
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+              <span className="text-[9px] uppercase font-bold text-emerald-600 block mb-0.5">Reason for Routing</span>
+              <p className="text-xs text-foreground font-medium italic">
+                {complaint.routingReason || `Grievance category '${complaint.category}' in ${complaint.state || "this state"} is routed to ${complaint.assignedAuthority || complaint.department}.`}
+              </p>
+            </div>
+          </div>
+
           {/* AI Summary card */}
           <div className="rounded-2xl border border-border bg-card p-6 shadow-premium relative overflow-hidden">
             <div className="absolute top-0 right-0 p-2.5 bg-primary-orange/10 text-primary-orange text-[9px] font-bold rounded-bl-xl border-l border-b border-border flex items-center gap-0.5">

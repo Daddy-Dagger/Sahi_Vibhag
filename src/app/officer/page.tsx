@@ -632,31 +632,51 @@ export default function OfficerDashboard() {
                   </div>
                 )}
 
-                {/* AI Extracted parameters */}
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-[10px] text-muted block uppercase font-bold">Department</span>
-                    <span className="font-extrabold text-primary-blue leading-tight">{selectedComplaint.department}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-muted block uppercase font-bold">Category</span>
-                    <span className="font-extrabold text-foreground leading-tight">{selectedComplaint.category}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-muted block uppercase font-bold">Priority</span>
-                    <span className={`font-extrabold text-[9px] uppercase px-1.5 py-0.5 rounded inline-block ${
-                      selectedComplaint.priority === "URGENT" ? "bg-red-500/10 text-red-500" :
-                      selectedComplaint.priority === "HIGH" ? "bg-orange-500/10 text-orange-500" :
-                      selectedComplaint.priority === "MEDIUM" ? "bg-yellow-500/10 text-yellow-600" :
-                      "bg-blue-500/10 text-blue-500"
-                    }`}>
-                      {selectedComplaint.priority}
+                {/* Deterministic Routing parameters */}
+                <div className="p-3 bg-muted-background/40 rounded-xl border border-border space-y-2">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-extrabold uppercase text-muted">Jurisdiction & Authority</span>
+                    <span className="text-primary-blue font-bold">
+                      State: {selectedComplaint.state || "Punjab"}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-muted block uppercase font-bold">Location Extracted</span>
-                    <span className="font-extrabold text-foreground block truncate">{selectedComplaint.location || "None"}</span>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[9px] text-muted block uppercase font-bold">Assigned Authority</span>
+                      <span className="font-extrabold text-primary-blue leading-tight block">
+                        {selectedComplaint.assignedAuthority || selectedComplaint.department}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-muted block uppercase font-bold">District / Municipality</span>
+                      <span className="font-extrabold text-foreground leading-tight block truncate">
+                        {selectedComplaint.district || selectedComplaint.city || "SAS Nagar"} / {selectedComplaint.municipality || "Local Body"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-muted block uppercase font-bold">Category</span>
+                      <span className="font-extrabold text-foreground leading-tight block">{selectedComplaint.category}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-muted block uppercase font-bold">Priority</span>
+                      <span className={`font-extrabold text-[9px] uppercase px-1.5 py-0.5 rounded inline-block ${
+                        selectedComplaint.priority === "URGENT" ? "bg-red-500/10 text-red-500" :
+                        selectedComplaint.priority === "HIGH" ? "bg-orange-500/10 text-orange-500" :
+                        selectedComplaint.priority === "MEDIUM" ? "bg-yellow-500/10 text-yellow-600" :
+                        "bg-blue-500/10 text-blue-500"
+                      }`}>
+                        {selectedComplaint.priority}
+                      </span>
+                    </div>
                   </div>
+
+                  {selectedComplaint.routingReason && (
+                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[11px] text-foreground italic">
+                      <span className="font-bold text-emerald-600 block text-[9px] uppercase not-italic">Routing Reason</span>
+                      {selectedComplaint.routingReason}
+                    </div>
+                  )}
                 </div>
 
                 {/* Checklist (Read-only on dashboard) */}
