@@ -16,11 +16,18 @@ const getDatabaseUrl = () => {
 
 const hasRealDb = !!getDatabaseUrl();
 
-// Initialize real Prisma client if available
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+// Initialize real Prisma client if available (singleton pattern for Next.js)
 let prismaInstance: PrismaClient | null = null;
 if (hasRealDb) {
   try {
-    prismaInstance = new PrismaClient();
+    prismaInstance = globalForPrisma.prisma ?? new PrismaClient();
+    if (process.env.NODE_ENV !== "production") {
+      globalForPrisma.prisma = prismaInstance;
+    }
   } catch (error) {
     console.error("Failed to initialize Prisma Client:", error);
   }
