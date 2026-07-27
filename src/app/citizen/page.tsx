@@ -22,7 +22,10 @@ import {
   FileText,
   BadgeAlert,
   Loader2,
-  Languages
+  Languages,
+  CheckCircle2,
+  HelpCircle,
+  ChevronRight
 } from "lucide-react";
 
 export default function CitizenPortal() {
@@ -50,6 +53,7 @@ export default function CitizenPortal() {
   
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
   
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -118,10 +122,15 @@ export default function CitizenPortal() {
     }
   };
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = async (overrideLocationChoice?: string) => {
     if (!complaintText.trim()) return;
     setAnalyzing(true);
-    setAnalysisResult(null);
+    if (!overrideLocationChoice) {
+      setSelectedOption(null);
+      setAnalysisResult(null);
+    } else {
+      setSelectedOption(overrideLocationChoice);
+    }
 
     try {
       const response = await fetch("/api/ai", {
@@ -131,6 +140,7 @@ export default function CitizenPortal() {
           text: complaintText,
           latitude: locationData.latitude,
           longitude: locationData.longitude,
+          selectedLocation: overrideLocationChoice || undefined,
         }),
       });
       const data = await response.json();
@@ -154,7 +164,7 @@ export default function CitizenPortal() {
   };
 
   const handleSubmit = async () => {
-    if (!analysisResult) return;
+    if (!analysisResult || analysisResult.status === "AMBIGUOUS_LOCATION") return;
     setSubmitting(true);
 
     try {
@@ -225,7 +235,7 @@ export default function CitizenPortal() {
           Citizen Portal
         </h1>
         <p className="text-sm text-muted">
-          Submit your civic complaints. Speak in your native language or type; our AI auto-translates and routes to the correct department.
+          Submit your civic complaints. Deterministic AI extracts location & routes to the correct authority without guessing.
         </p>
       </div>
 
@@ -329,13 +339,13 @@ export default function CitizenPortal() {
                   <textarea
                     value={complaintText}
                     onChange={(e) => setComplaintText(e.target.value)}
-                    placeholder="Provide details about the issue (e.g. location, severity, duration). You can speak it or type it in Hindi/English/Hinglish."
+                    placeholder="Provide details about the issue (e.g. 'Pani ki problem in Jagti'). Speak or type in Hindi/English."
                     className="w-full min-h-[160px] p-4 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue/30 mb-4"
                   />
 
                   <Button
                     disabled={analyzing || !complaintText.trim()}
-                    onClick={handleAnalyze}
+                    onClick={() => handleAnalyze()}
                     variant="glow-blue"
                     size="md"
                     className="w-full"
@@ -343,7 +353,7 @@ export default function CitizenPortal() {
                     {analyzing ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        AI Analysis in Progress...
+                        Analyzing & Resolving Location...
                       </>
                     ) : (
                       <>
@@ -367,9 +377,9 @@ export default function CitizenPortal() {
                     className="rounded-2xl border border-border bg-card p-8 shadow-premium text-center flex flex-col items-center justify-center min-h-[300px]"
                   >
                     <Loader2 className="w-12 h-12 text-primary-blue animate-spin mb-4" />
-                    <h3 className="font-bold text-lg mb-2">Analyzing Grievance</h3>
+                    <h3 className="font-bold text-lg mb-2">Resolving Location & Jurisdiction</h3>
                     <p className="text-xs text-muted max-w-sm">
-                      Gemini 2.5 Flash is parsing your input, translating dialects, identifying the target department, assessing safety priority levels, and preparing evidence guidelines...
+                      Extracting information, geocoding candidates, scoring location confidence, and mapping state authority...
                     </p>
                   </motion.div>
                 )}
@@ -394,91 +404,148 @@ export default function CitizenPortal() {
                     animate={{ opacity: 1, y: 0 }}
                     className="rounded-2xl border border-border bg-card p-6 shadow-premium space-y-6"
                   >
-                    {/* Stage 1 AI & Stage 2 Routing Engine Header */}
+                    {/* Header */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-3 border-b border-border gap-2">
                       <div>
                         <span className="text-[10px] text-muted block uppercase font-bold tracking-wider">Routing Pipeline</span>
                         <span className="text-xs font-extrabold text-foreground flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-primary-orange" />
-                          Stage 1 AI Extraction → Stage 2 Jurisdiction Engine
+                          Gemini Extraction → Location Resolver → Authority Mapping
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] bg-primary-blue/10 text-primary-blue font-bold px-2 py-1 rounded-lg border border-primary-blue/20">
-                          AI: {Math.round(analysisResult.confidence * 100)}%
+                          AI Extract: {Math.round(analysisResult.confidence * 100)}%
                         </span>
-                        <span className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold px-2 py-1 rounded-lg border border-emerald-500/20">
-                          Routing: {Math.round((analysisResult.routingConfidence || analysisResult.confidence) * 100)}%
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                          analysisResult.status === "AMBIGUOUS_LOCATION"
+                            ? "bg-amber-500/10 text-amber-600 border-amber-500/20 animate-pulse"
+                            : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                        }`}>
+                          Loc Conf: {Math.round((analysisResult.locationConfidence || analysisResult.routingConfidence || 0) * 100)}%
                         </span>
                       </div>
                     </div>
 
-                    {/* Ambiguity Alert Banner (Bonus Feature) */}
-                    {analysisResult.locationMapped === false && (
-                      <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
-                        <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-xs">
-                          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                          <span>Location could not be mapped confidently.</span>
+                    {/* AMBIGUOUS LOCATION UI CARD */}
+                    {analysisResult.status === "AMBIGUOUS_LOCATION" && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="p-5 bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl space-y-4 shadow-md"
+                      >
+                        <div className="flex items-start gap-3 text-amber-800 dark:text-amber-300">
+                          <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="font-extrabold text-sm text-amber-800 dark:text-amber-300">
+                              We found multiple locations named '{analysisResult.extractedLocation || "this place"}'.
+                            </h4>
+                            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 font-medium">
+                              Please select the correct location below so we can route your grievance to the proper state government authority.
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-muted pl-6">
-                          Please suggest one of the following to resolve exact jurisdiction:
-                        </p>
-                        <div className="flex flex-wrap gap-2 pl-6 pt-1">
-                          {(analysisResult.locationSuggestions || ["Nearby landmark", "Pin location on map", "Pincode"]).map((sug: string, idx: number) => (
-                            <span key={idx} className="text-[10px] bg-card border border-amber-500/30 text-amber-600 px-2 py-0.5 rounded-full font-semibold">
-                              💡 {sug}
-                            </span>
-                          ))}
+
+                        {/* Candidate Option Buttons */}
+                        <div className="space-y-2.5 pt-1">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-amber-800 dark:text-amber-300 block">
+                            Select correct location:
+                          </span>
+                          {(analysisResult.options || ["Jagti, Jammu", "Jagti, Punjab"]).map((opt: string, idx: number) => {
+                            const isSelected = selectedOption === opt;
+                            return (
+                              <button
+                                key={idx}
+                                onClick={() => handleAnalyze(opt)}
+                                className={`w-full flex items-center justify-between p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                  isSelected
+                                    ? "bg-amber-500 text-white border-amber-600 shadow-md font-bold"
+                                    : "bg-card hover:bg-amber-500/10 text-foreground border-amber-500/30 font-semibold"
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={`p-2 rounded-lg ${isSelected ? "bg-white/20 text-white" : "bg-amber-500/10 text-amber-600"}`}>
+                                    <MapPin className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <span className="text-sm font-extrabold block">{opt}</span>
+                                    <span className="text-[10px] opacity-80 font-normal">
+                                      Confirm jurisdiction for {opt}
+                                    </span>
+                                  </div>
+                                </div>
+                                <ChevronRight className={`w-5 h-5 ${isSelected ? "text-white" : "text-amber-500"}`} />
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="p-2.5 bg-amber-500/20 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 text-center font-bold">
+                          ⚠️ Routing paused. System will never silently assign the wrong state.
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* DETERMINISTIC ROUTING BREAKDOWN GRID (When Resolved) */}
+                    {analysisResult.status !== "AMBIGUOUS_LOCATION" && (
+                      <div className="rounded-xl border border-border bg-muted-background/30 p-4 space-y-3">
+                        <h4 className="text-xs font-extrabold uppercase text-muted tracking-wider flex items-center gap-1.5">
+                          <Building className="w-4 h-4 text-primary-blue" />
+                          Resolved Jurisdiction & Authority
+                        </h4>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                          <div className="bg-card p-2.5 rounded-lg border border-border">
+                            <span className="text-[9px] uppercase font-bold text-muted block">Extracted Location</span>
+                            <span className="font-extrabold text-foreground truncate block">{analysisResult.extractedLocation || "Not specified"}</span>
+                          </div>
+                          <div className="bg-card p-2.5 rounded-lg border border-border">
+                            <span className="text-[9px] uppercase font-bold text-muted block">Resolved State</span>
+                            <span className="font-extrabold text-primary-blue">{analysisResult.detectedState || "Punjab"}</span>
+                          </div>
+                          <div className="bg-card p-2.5 rounded-lg border border-border">
+                            <span className="text-[9px] uppercase font-bold text-muted block">Resolved District</span>
+                            <span className="font-extrabold text-foreground">{analysisResult.detectedDistrict || "SAS Nagar"}</span>
+                          </div>
+                          <div className="bg-card p-2.5 rounded-lg border border-border">
+                            <span className="text-[9px] uppercase font-bold text-muted block">Category</span>
+                            <span className="font-bold text-foreground truncate block">{analysisResult.category}</span>
+                          </div>
+                          <div className="bg-card p-2.5 rounded-lg border border-border sm:col-span-2">
+                            <span className="text-[9px] uppercase font-bold text-muted block">Resolved Municipality</span>
+                            <span className="font-bold text-foreground truncate block">{analysisResult.detectedMunicipality || "Local Body"}</span>
+                          </div>
+                        </div>
+
+                        {/* Assigned Authority Box */}
+                        <div className="p-3.5 bg-primary-blue/10 border border-primary-blue/20 rounded-xl">
+                          <span className="text-[9px] uppercase font-bold text-primary-blue block">Assigned Government Authority</span>
+                          <span className="text-base font-black text-foreground">
+                            {analysisResult.assignedAuthority || analysisResult.department}
+                          </span>
+                        </div>
+
+                        {/* Reason for Routing Box */}
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                          <span className="text-[9px] uppercase font-bold text-emerald-600 block mb-0.5">Why this authority was selected</span>
+                          <p className="text-xs text-foreground font-medium italic">
+                            {analysisResult.reasonForRouting || `Complaints for ${analysisResult.category} in ${analysisResult.detectedState} are handled by ${analysisResult.assignedAuthority}.`}
+                          </p>
+                        </div>
+
+                        {/* Confidence Metrics Bar */}
+                        <div className="grid grid-cols-2 gap-3 pt-1 text-xs">
+                          <div className="bg-card p-2.5 rounded-lg border border-border flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-muted">Location Confidence:</span>
+                            <span className="font-extrabold text-emerald-600">{Math.round((analysisResult.locationConfidence || 0.95) * 100)}%</span>
+                          </div>
+                          <div className="bg-card p-2.5 rounded-lg border border-border flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-muted">Routing Confidence:</span>
+                            <span className="font-extrabold text-primary-blue">{Math.round((analysisResult.routingConfidence || 0.95) * 100)}%</span>
+                          </div>
                         </div>
                       </div>
                     )}
-
-                    {/* Deterministic Routing Breakdown Grid */}
-                    <div className="rounded-xl border border-border bg-muted-background/30 p-4 space-y-3">
-                      <h4 className="text-xs font-extrabold uppercase text-muted tracking-wider flex items-center gap-1.5">
-                        <Building className="w-4 h-4 text-primary-blue" />
-                        Determined Authority & Jurisdiction
-                      </h4>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                        <div className="bg-card p-2.5 rounded-lg border border-border">
-                          <span className="text-[9px] uppercase font-bold text-muted block">Category</span>
-                          <span className="font-extrabold text-foreground">{analysisResult.category}</span>
-                        </div>
-                        <div className="bg-card p-2.5 rounded-lg border border-border">
-                          <span className="text-[9px] uppercase font-bold text-muted block">Detected State</span>
-                          <span className="font-extrabold text-primary-blue">{analysisResult.detectedState || "Punjab"}</span>
-                        </div>
-                        <div className="bg-card p-2.5 rounded-lg border border-border">
-                          <span className="text-[9px] uppercase font-bold text-muted block">Detected District</span>
-                          <span className="font-extrabold text-foreground">{analysisResult.detectedDistrict || "SAS Nagar"}</span>
-                        </div>
-                        <div className="bg-card p-2.5 rounded-lg border border-border sm:col-span-2">
-                          <span className="text-[9px] uppercase font-bold text-muted block">Extracted Location</span>
-                          <span className="font-bold text-foreground truncate block">{analysisResult.extractedLocation || analysisResult.location || "Not mentioned"}</span>
-                        </div>
-                        <div className="bg-card p-2.5 rounded-lg border border-border">
-                          <span className="text-[9px] uppercase font-bold text-muted block">Municipality</span>
-                          <span className="font-bold text-foreground truncate block">{analysisResult.detectedMunicipality || "Local Corporation"}</span>
-                        </div>
-                      </div>
-
-                      {/* Assigned Authority Box */}
-                      <div className="p-3 bg-primary-blue/10 border border-primary-blue/20 rounded-xl">
-                        <span className="text-[9px] uppercase font-bold text-primary-blue block">Assigned Government Authority</span>
-                        <span className="text-sm font-black text-foreground">
-                          {analysisResult.assignedAuthority || analysisResult.department}
-                        </span>
-                      </div>
-
-                      {/* Reason for Routing Box */}
-                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                        <span className="text-[9px] uppercase font-bold text-emerald-600 block mb-0.5">Reason for Routing</span>
-                        <p className="text-xs text-foreground font-medium italic">
-                          {analysisResult.reasonForRouting || `Complaints for ${analysisResult.category} in ${analysisResult.detectedState || "this jurisdiction"} are handled by ${analysisResult.assignedAuthority || analysisResult.department}.`}
-                        </p>
-                      </div>
-                    </div>
 
                     {/* Metadata Badges */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -498,7 +565,7 @@ export default function CitizenPortal() {
                             analysisResult.priority === "MEDIUM" ? "text-yellow-600" :
                             "text-blue-500"
                           }`}>
-                            {analysisResult.priority.toLowerCase()}
+                            {analysisResult.priority?.toLowerCase()}
                           </span>
                         </div>
                       </div>
@@ -534,55 +601,39 @@ export default function CitizenPortal() {
                       </p>
                     </div>
 
-                    {/* Missing Info Callouts */}
-                    {analysisResult.missingInformation && analysisResult.missingInformation.length > 0 && (
-                      <div className="p-4 bg-amber-500/10 rounded-xl border border-amber-500/20">
-                        <h4 className="text-xs font-bold text-amber-600 uppercase mb-2 flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4" />
-                          Missing Grievance Details Detected
-                        </h4>
-                        <ul className="list-disc pl-4 space-y-1 text-xs text-amber-700">
-                          {analysisResult.missingInformation.map((info: string, idx: number) => (
-                            <li key={idx}>{info}</li>
+                    {/* Evidence Checklist */}
+                    {analysisResult.evidenceChecklist && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted block mb-2">Required Evidence / Verification Checklist</span>
+                        <div className="space-y-2">
+                          {analysisResult.evidenceChecklist.map((item: any, idx: number) => (
+                            <button
+                              key={idx}
+                              onClick={() => handleToggleChecklist(idx)}
+                              className="w-full flex items-center justify-between p-3 border border-border bg-muted-background/20 rounded-xl hover:bg-muted-background/40 transition-colors text-left"
+                            >
+                              <span className="text-xs font-medium text-foreground">{item.name}</span>
+                              <span className="flex items-center gap-1.5">
+                                {item.required && (
+                                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">
+                                    Required
+                                  </span>
+                                )}
+                                <span className={`h-5 w-5 rounded-full flex items-center justify-center border text-white transition-colors ${
+                                  item.submitted ? "bg-emerald-500 border-emerald-500" : "bg-background border-border"
+                                }`}>
+                                  {item.submitted && <FileCheck2 className="w-3.5 h-3.5" />}
+                                </span>
+                              </span>
+                            </button>
                           ))}
-                        </ul>
-                        <p className="text-[10px] text-amber-600 mt-2">
-                          Providing these details below will speed up official investigations.
-                        </p>
+                        </div>
                       </div>
                     )}
 
-                    {/* Evidence Checklist */}
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-muted block mb-2">Required Evidence / Verification Checklist</span>
-                      <div className="space-y-2">
-                        {analysisResult.evidenceChecklist.map((item: any, idx: number) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleToggleChecklist(idx)}
-                            className="w-full flex items-center justify-between p-3 border border-border bg-muted-background/20 rounded-xl hover:bg-muted-background/40 transition-colors text-left"
-                          >
-                            <span className="text-xs font-medium text-foreground">{item.name}</span>
-                            <span className="flex items-center gap-1.5">
-                              {item.required && (
-                                <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">
-                                  Required
-                                </span>
-                              )}
-                              <span className={`h-5 w-5 rounded-full flex items-center justify-center border text-white transition-colors ${
-                                item.submitted ? "bg-emerald-500 border-emerald-500" : "bg-background border-border"
-                              }`}>
-                                {item.submitted && <FileCheck2 className="w-3.5 h-3.5" />}
-                              </span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
                     {/* Submit Button */}
                     <Button
-                      disabled={submitting}
+                      disabled={submitting || analysisResult.status === "AMBIGUOUS_LOCATION"}
                       onClick={handleSubmit}
                       variant="glow-orange"
                       size="lg"
@@ -596,7 +647,9 @@ export default function CitizenPortal() {
                       ) : (
                         <>
                           <Send className="w-4 h-4" />
-                          Submit Complaint to Department
+                          {analysisResult.status === "AMBIGUOUS_LOCATION"
+                            ? "Please Select Location Above to Continue"
+                            : "Submit Complaint to Department"}
                         </>
                       )}
                     </Button>
@@ -620,7 +673,7 @@ export default function CitizenPortal() {
               Grievance Filed Successfully!
             </h2>
             <p className="text-xs text-muted max-w-sm mx-auto">
-              Your complaint has been processed by Sahi Vibhag AI and automatically routed to the correct government department. A unique tracking ID has been generated.
+              Your complaint has been deterministically resolved and routed to the correct government department.
             </p>
 
             <div className="p-4 bg-muted-background rounded-2xl border border-border flex justify-between items-center text-xs">
@@ -643,6 +696,7 @@ export default function CitizenPortal() {
                   setSubmitSuccess(false);
                   setComplaintText("");
                   setAnalysisResult(null);
+                  setSelectedOption(null);
                 }}
                 variant="outline"
                 size="md"

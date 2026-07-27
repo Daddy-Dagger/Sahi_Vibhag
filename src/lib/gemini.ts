@@ -1,12 +1,15 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { OpenAI } from "openai";
 import { resolveJurisdictionAndRoute, RoutingOutput } from "./jurisdictionEngine";
+import { CandidateLocation } from "./locationResolver";
 
 export interface RawAIExtractedResult {
   title: string;
   translatedDescription: string | null;
   category: string;
   subcategory: string;
+  locations: string[];
+  landmarks: string[];
   location: string | null;
   state: string | null;
   city: string | null;
@@ -21,6 +24,9 @@ export interface RawAIExtractedResult {
 }
 
 export interface AIAnalysisResult extends RawAIExtractedResult {
+  status: "RESOLVED" | "AMBIGUOUS_LOCATION";
+  options?: string[];
+  candidates?: CandidateLocation[];
   department: string; // Matches assignedAuthority for backwards compatibility
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"; // Matches urgency for backwards compatibility
   
@@ -32,6 +38,7 @@ export interface AIAnalysisResult extends RawAIExtractedResult {
   detectedMunicipality: string;
   assignedAuthority: string;
   reasonForRouting: string;
+  locationConfidence: number;
   routingConfidence: number;
   locationMapped: boolean;
   locationSuggestions?: string[];
@@ -41,6 +48,7 @@ export interface AIAnalysisResult extends RawAIExtractedResult {
 export interface AnalyzeOptions {
   latitude?: number | null;
   longitude?: number | null;
+  selectedLocation?: string | null;
 }
 
 // Fallback keyword-based extraction when AI keys are not present or fail
@@ -54,6 +62,8 @@ const performFallbackExtraction = (text: string): RawAIExtractedResult => {
   let evidenceChecklist: Array<{ name: string; required: boolean; submitted: boolean }> = [
     { name: "Photograph of the issue", required: true, submitted: false }
   ];
+  let locations: string[] = [];
+  let landmarks: string[] = [];
   let location: string | null = null;
   let landmark: string | null = null;
   let city: string | null = null;
@@ -68,7 +78,19 @@ const performFallbackExtraction = (text: string): RawAIExtractedResult => {
     title = text;
   }
 
-  // State detection in text
+  // Known place checks
+  if (t.includes("jagti")) {
+    locations.push("Jagti");
+    location = "Jagti";
+  }
+  if (t.includes("iit jammu")) {
+    landmarks.push("IIT Jammu");
+    landmark = "IIT Jammu";
+  } else if (t.includes("phase 5")) {
+    landmarks.push("Phase 5");
+    landmark = "Phase 5";
+  }
+
   if (t.includes("punjab") || t.includes("mohali") || t.includes("amritsar") || t.includes("ludhiana")) {
     state = "Punjab";
   } else if (t.includes("delhi") || t.includes("rohini") || t.includes("dwarka") || t.includes("saket")) {
@@ -77,22 +99,16 @@ const performFallbackExtraction = (text: string): RawAIExtractedResult => {
     state = "Jammu & Kashmir";
   }
 
-  // City / District / Landmark detection
-  if (t.includes("mohali") || t.includes("phase 5") || t.includes("sas nagar")) {
+  if (t.includes("mohali")) {
     city = "Mohali";
     district = "SAS Nagar";
-    landmark = t.includes("phase 5") ? "Phase 5" : "Mohali";
-    location = "Phase 5 Mohali";
   } else if (t.includes("jammu")) {
     city = "Jammu";
     district = "Jammu";
-    location = "Jammu";
   } else if (t.includes("delhi")) {
     city = "Delhi";
-    location = "Delhi";
   }
 
-  // Basic Location extraction if not matched
   if (!location) {
     const locationKeywords = ["near", "at", "in", "sector", "lane", "road", "colony", "nagar", "chowk", "phase"];
     for (const keyword of locationKeywords) {
@@ -100,7 +116,8 @@ const performFallbackExtraction = (text: string): RawAIExtractedResult => {
       if (idx !== -1) {
         const remaining = text.slice(idx);
         const words = remaining.split(" ");
-        location = words.slice(0, 5).join(" ");
+        location = words.slice(0, 3).join(" ");
+        locations.push(location);
         break;
       }
     }
@@ -130,8 +147,8 @@ const performFallbackExtraction = (text: string): RawAIExtractedResult => {
     evidenceChecklist.push({ name: "Electricity Bill (if billing issue)", required: false, submitted: false });
     missingInformation.push("Pole number or electricity connection ID");
     confidence = 0.95;
-  } else if (t.includes("water") || t.includes("paani") || t.includes("leak") || t.includes("tap") || t.includes("dirty")) {
-    category = "Water";
+  } else if (t.includes("water") || t.includes("paani") || t.includes("pani") || t.includes("leak") || t.includes("tap") || t.includes("dirty")) {
+    category = "Water Supply";
     subcategory = "Water Supply & Sewage";
     urgency = t.includes("no water") || t.includes("dry") ? "HIGH" : "MEDIUM";
     summary = "Complaint concerning clean water supply, pipeline leakages, or contaminated water.";
@@ -161,6 +178,8 @@ const performFallbackExtraction = (text: string): RawAIExtractedResult => {
     translatedDescription,
     category,
     subcategory,
+    locations: locations.length > 0 ? locations : location ? [location] : [],
+    landmarks: landmarks.length > 0 ? landmarks : landmark ? [landmark] : [],
     location,
     state,
     city,
@@ -181,7 +200,7 @@ async function extractWithOpenAI(text: string, apiKey: string): Promise<RawAIExt
 
   const prompt = `You are "Sahi Vibhag AI Stage 1 Extractor", an AI information extraction engine for Indian civic grievances.
 Your ONLY role is to extract structured information from the citizen's complaint.
-DO NOT DECIDE THE FINAL GOVERNMENT AUTHORITY OR DEPARTMENT (e.g. Do not output PSPCL, MCD, PWD, etc.).
+CRITICAL: DO NOT DECIDE THE FINAL GOVERNMENT AUTHORITY OR DEPARTMENT (e.g. Do NOT output PSPCL, MCD, PWD, JPDCL, etc.).
 
 Analyze this citizen complaint:
 "${text}"
@@ -190,13 +209,15 @@ Return a JSON object with this exact schema:
 {
   "title": "Concise English title summarizing the complaint",
   "translatedDescription": "If original is in Hindi/Hinglish/Urdu/Dogri etc, translate to formal Hindi. If already English, return null.",
-  "category": "Broad complaint category, e.g. 'Electricity', 'Roads', 'Water', 'Garbage', 'Streetlights', 'Traffic'",
+  "category": "Broad complaint category, e.g. 'Electricity', 'Roads', 'Water Supply', 'Garbage', 'Streetlights', 'Traffic'",
   "subcategory": "2-3 word subcategory, e.g. 'Power Outage', 'Potholes', 'Pipeline Leakage', 'Waste Accumulation'",
-  "location": "Extracted landmark, street, sector, locality, or city string mentioned in text (or null)",
+  "locations": ["List of all detected place, village, locality, town, or area names mentioned in text, e.g. ['Jagti']"],
+  "landmarks": ["List of all detected landmarks, institutions, or specific spots mentioned in text, e.g. ['IIT Jammu']"],
+  "location": "Primary extracted location string or null",
   "state": "State mentioned in text if any, e.g. 'Punjab', 'Delhi', 'Jammu & Kashmir' (or null)",
   "city": "City/town mentioned in text if any, e.g. 'Mohali', 'Jammu', 'New Delhi' (or null)",
   "district": "District mentioned in text if any, e.g. 'SAS Nagar' (or null)",
-  "landmark": "Specific landmark or sector, e.g. 'Phase 5' (or null)",
+  "landmark": "Primary landmark mentioned if any (or null)",
   "urgency": "Choose one: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'",
   "summary": "1-2 sentence formal government summary of the grievance in English",
   "missingInformation": ["Critical missing details, e.g. Pole ID, House No"],
@@ -217,16 +238,21 @@ Return a JSON object with this exact schema:
   const responseText = completion.choices[0]?.message?.content || "";
   const json = JSON.parse(responseText.trim());
 
+  const locs = Array.isArray(json.locations) ? json.locations : json.location ? [json.location] : [];
+  const lms = Array.isArray(json.landmarks) ? json.landmarks : json.landmark ? [json.landmark] : [];
+
   return {
     title: json.title || "Civic Complaint",
     translatedDescription: json.translatedDescription || null,
     category: json.category || "General",
     subcategory: json.subcategory || json.category || "General Grievance",
-    location: json.location || null,
+    locations: locs,
+    landmarks: lms,
+    location: json.location || (locs[0] ?? null),
     state: json.state || null,
     city: json.city || null,
     district: json.district || null,
-    landmark: json.landmark || null,
+    landmark: json.landmark || (lms[0] ?? null),
     urgency: json.urgency || "MEDIUM",
     summary: json.summary || "",
     missingInformation: json.missingInformation || json.missing_information || [],
@@ -244,7 +270,7 @@ async function extractWithGemini(text: string, apiKey: string): Promise<RawAIExt
 
   const prompt = `You are "Sahi Vibhag AI Stage 1 Extractor", an AI information extraction engine for Indian civic grievances.
 Your ONLY role is to extract structured information from the citizen's complaint.
-IMPORTANT: DO NOT DECIDE THE FINAL GOVERNMENT AUTHORITY OR DEPARTMENT (e.g. Do not output PSPCL, MCD, PWD, etc.).
+CRITICAL: DO NOT DECIDE THE FINAL GOVERNMENT AUTHORITY OR DEPARTMENT (e.g. Do NOT output PSPCL, MCD, PWD, JPDCL, etc.).
 
 Analyze this citizen complaint:
 "${text}"
@@ -253,13 +279,15 @@ Return a JSON object with this exact schema:
 {
   "title": "Concise English title summarizing the complaint",
   "translatedDescription": "If original is in Hindi/Hinglish/Urdu/Dogri etc, translate to formal Hindi. If already English, return null.",
-  "category": "Broad complaint category, e.g. 'Electricity', 'Roads', 'Water', 'Garbage', 'Streetlights', 'Traffic'",
+  "category": "Broad complaint category, e.g. 'Electricity', 'Roads', 'Water Supply', 'Garbage', 'Streetlights', 'Traffic'",
   "subcategory": "2-3 word subcategory, e.g. 'Power Outage', 'Potholes', 'Pipeline Leakage', 'Waste Accumulation'",
-  "location": "Extracted landmark, street, sector, locality, or city string mentioned in text (or null)",
+  "locations": ["List of all detected place, village, locality, town, or area names mentioned in text, e.g. ['Jagti']"],
+  "landmarks": ["List of all detected landmarks, institutions, or specific spots mentioned in text, e.g. ['IIT Jammu']"],
+  "location": "Primary extracted location string or null",
   "state": "State mentioned in text if any, e.g. 'Punjab', 'Delhi', 'Jammu & Kashmir' (or null)",
   "city": "City/town mentioned in text if any, e.g. 'Mohali', 'Jammu', 'New Delhi' (or null)",
   "district": "District mentioned in text if any, e.g. 'SAS Nagar' (or null)",
-  "landmark": "Specific landmark or sector, e.g. 'Phase 5' (or null)",
+  "landmark": "Primary landmark mentioned if any (or null)",
   "urgency": "Choose one: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'",
   "summary": "1-2 sentence formal government summary of the grievance in English",
   "missingInformation": ["Critical missing details, e.g. Pole ID, House No"],
@@ -280,16 +308,21 @@ Return ONLY valid JSON. No markdown code blocks.`;
   const responseText = result.response.text();
   const json = JSON.parse(responseText.trim());
 
+  const locs = Array.isArray(json.locations) ? json.locations : json.location ? [json.location] : [];
+  const lms = Array.isArray(json.landmarks) ? json.landmarks : json.landmark ? [json.landmark] : [];
+
   return {
     title: json.title || "Civic Complaint",
     translatedDescription: json.translatedDescription || null,
     category: json.category || "General",
     subcategory: json.subcategory || json.category || "General Grievance",
-    location: json.location || null,
+    locations: locs,
+    landmarks: lms,
+    location: json.location || (locs[0] ?? null),
     state: json.state || null,
     city: json.city || null,
     district: json.district || null,
-    landmark: json.landmark || null,
+    landmark: json.landmark || (lms[0] ?? null),
     urgency: json.urgency || "MEDIUM",
     summary: json.summary || "",
     missingInformation: json.missingInformation || json.missing_information || [],
@@ -341,12 +374,14 @@ export async function analyzeComplaint(
     extraction = performFallbackExtraction(text);
   }
 
-  // 2. Stage 2 Deterministic Jurisdiction Engine & Authority Resolver
+  // 2. Stage 2 Deterministic Location Resolver & Authority Engine
   console.log("[Sahi Vibhag AI] Stage 2 Deterministic Jurisdiction Engine running...");
   const routingResult: RoutingOutput = await resolveJurisdictionAndRoute({
     text: text,
     category: extraction.category,
     subcategory: extraction.subcategory,
+    locations: extraction.locations,
+    landmarks: extraction.landmarks,
     location: extraction.location,
     state: extraction.state,
     city: extraction.city,
@@ -354,11 +389,15 @@ export async function analyzeComplaint(
     landmark: extraction.landmark,
     latitude: options?.latitude,
     longitude: options?.longitude,
+    selectedLocation: options?.selectedLocation,
     aiConfidence: extraction.confidence,
   });
 
   return {
     ...extraction,
+    status: routingResult.status,
+    options: routingResult.options,
+    candidates: routingResult.candidates,
     priority: extraction.urgency,
     department: routingResult.assignedAuthority, // For backwards compatibility
     
@@ -370,6 +409,7 @@ export async function analyzeComplaint(
     detectedMunicipality: routingResult.detectedMunicipality,
     assignedAuthority: routingResult.assignedAuthority,
     reasonForRouting: routingResult.reasonForRouting,
+    locationConfidence: routingResult.locationConfidence,
     routingConfidence: routingResult.routingConfidence,
     locationMapped: routingResult.locationMapped,
     locationSuggestions: routingResult.locationSuggestions,

@@ -18,14 +18,17 @@ enum Role {
 }
 
 model User {
-  id         String   @id @default(uuid())
-  email      String   @unique
-  name       String
-  password   String
-  role       Role     @default(CONSUMER)
-  department String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  email                  String   @unique
+  name                   String
+  password               String
+  role                   Role     @default(CONSUMER)
+  department             String?
+  phone                  String?
+  preferredLanguage      String?  @default("English")
+  notificationPreference String?  @default("Email & In-App")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }
 
 model Complaint {

@@ -50,6 +50,7 @@ export default function Navbar() {
   const navItems = [
     { name: "Home", path: "/" },
     { name: "Grievance Portal", path: "/citizen" },
+    ...(user && user.role === "CONSUMER" ? [{ name: "Citizen Dashboard", path: "/dashboard" }] : []),
   ];
 
   return (

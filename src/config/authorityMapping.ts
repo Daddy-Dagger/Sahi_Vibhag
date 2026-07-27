@@ -42,11 +42,11 @@ export const AUTHORITY_MAPPING: AuthorityMappingConfig = {
     "roadways": "Roads",
     "infrastructure": "Roads",
     "potholes": "Roads",
-    "water": "Water",
-    "water supply": "Water",
-    "water & sewage": "Water",
-    "drinking water": "Water",
-    "sewage": "Water",
+    "water": "Water Supply",
+    "water supply": "Water Supply",
+    "water & sewage": "Water Supply",
+    "drinking water": "Water Supply",
+    "sewage": "Water Supply",
     "garbage": "Garbage",
     "waste management": "Garbage",
     "waste management & sanitation": "Garbage",
@@ -71,7 +71,7 @@ export const AUTHORITY_MAPPING: AuthorityMappingConfig = {
           authority: "Public Works Department (PWD Punjab)",
           reason: "State highways, major arterial roads, and infrastructure maintenance in Punjab are governed by PWD Punjab.",
         },
-        "Water": {
+        "Water Supply": {
           authority: "Punjab Water Supply & Sewerage Board",
           reason: "Water supply infrastructure, clean water distribution, and major sewerage networks in Punjab are managed by PWSSB.",
         },
@@ -123,7 +123,7 @@ export const AUTHORITY_MAPPING: AuthorityMappingConfig = {
           authority: "Municipal Corporation of Delhi (MCD)",
           reason: "Civic waste collection, street sweeping, and sanitation across Delhi zones fall under MCD jurisdiction.",
         },
-        "Water": {
+        "Water Supply": {
           authority: "Delhi Jal Board (DJB)",
           reason: "Drinking water supply, pipeline maintenance, and sewage treatment in Delhi are handled exclusively by Delhi Jal Board.",
         },
@@ -152,14 +152,14 @@ export const AUTHORITY_MAPPING: AuthorityMappingConfig = {
           reason: "Power distribution, billing, and electrical line maintenance in Jammu region are managed by JPDCL (and KPDCL in Kashmir).",
           localityRules: [
             {
-              keywords: ["srinagar", "anantnag", "baramulla", "pulwama", "kashmir", "ganderbal", "budgam", "kupwara", "kulgam", "shopian", "bandipora"],
-              authority: "Kashmir Power Distribution Corporation Limited (KPDCL)",
-              reason: "Electricity distribution in Kashmir province is managed by KPDCL."
-            },
-            {
               keywords: ["jammu", "samba", "kathua", "udhampur", "reasi", "rajouri", "poonch", "doda", "ramban", "kishtwar"],
               authority: "Jammu Power Distribution Corporation Limited (JPDCL)",
               reason: "Power distribution across Jammu province is managed by JPDCL."
+            },
+            {
+              keywords: ["srinagar", "anantnag", "baramulla", "pulwama", "ganderbal", "budgam", "kupwara", "kulgam", "shopian", "bandipora"],
+              authority: "Kashmir Power Distribution Corporation Limited (KPDCL)",
+              reason: "Electricity distribution in Kashmir province is managed by KPDCL."
             }
           ]
         },
@@ -167,9 +167,9 @@ export const AUTHORITY_MAPPING: AuthorityMappingConfig = {
           authority: "Public Works Department (PWD J&K)",
           reason: "Road networks, bridges, and civil public works in Jammu & Kashmir are managed by PWD (R&B) J&K.",
         },
-        "Water": {
+        "Water Supply": {
           authority: "Jal Shakti Department (PHED J&K)",
-          reason: "Public drinking water supply and rural water infrastructure in J&K are governed by Jal Shakti (PHED) J&K.",
+          reason: "Public drinking water supply and rural water infrastructure in J&K are governed by Jal Shakti (PHED J&K).",
         },
         "Garbage": {
           authority: "Jammu Municipal Corporation",
@@ -227,7 +227,7 @@ export const AUTHORITY_MAPPING: AuthorityMappingConfig = {
           authority: "Public Works Department (PWD Haryana)",
           reason: "State highways and infrastructure in Haryana are maintained by PWD Haryana.",
         },
-        "Water": {
+        "Water Supply": {
           authority: "Public Health Engineering Department (PHED Haryana)",
           reason: "Water supply and sanitation services in Haryana are managed by PHED Haryana.",
         },
@@ -255,7 +255,7 @@ export const AUTHORITY_MAPPING: AuthorityMappingConfig = {
           authority: "Public Works Department (PWD UP)",
           reason: "Road construction and maintenance in Uttar Pradesh are managed by PWD UP.",
         },
-        "Water": {
+        "Water Supply": {
           authority: "UP Jal Nigam",
           reason: "Water supply pipelines and sewage infrastructure in Uttar Pradesh fall under UP Jal Nigam.",
         },
@@ -285,7 +285,7 @@ export const AUTHORITY_MAPPING: AuthorityMappingConfig = {
         authority: "Public Works Department (PWD)",
         reason: "Road infrastructure grievances are assigned to the state Public Works Department.",
       },
-      "Water": {
+      "Water Supply": {
         authority: "Water Supply & Sewerage Board",
         reason: "Drinking water and sanitation complaints are routed to the state Water Supply Board.",
       },
